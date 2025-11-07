@@ -1,0 +1,6 @@
+# Core dependencies - versions TBD
+insightface
+opencv-python
+numpy
+chromadb
+
