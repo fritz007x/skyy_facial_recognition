@@ -191,7 +191,9 @@ This project enhances the Skyy AI platform by developing a facial recognition ca
 
 The MCP server provides tools for facial recognition that can be integrated with MCP-compatible clients.
 
-**Start the server:**
+**IMPORTANT:** The MCP server must be running in a separate terminal for the webcam capture tool to work.
+
+**Start the server (Terminal 1):**
 ```bash
 # Make sure virtual environment is activated
 facial_mcp_py311\Scripts\activate  # Windows
@@ -201,7 +203,7 @@ facial_mcp_py311\Scripts\activate  # Windows
 python src/skyy_facial_recognition_mcp.py
 ```
 
-The server will expose the following tools:
+Keep this terminal running. The server will expose the following tools:
 - `skyy_register_user` - Register a new user with facial data
 - `skyy_recognize_face` - Recognize a registered user from an image
 - `skyy_list_users` - List all registered users
@@ -212,8 +214,11 @@ The server will expose the following tools:
 
 ### Testing with Webcam Capture Tool
 
-For interactive testing and demonstration, use the webcam capture tool:
+For interactive testing and demonstration, use the webcam capture tool.
 
+**IMPORTANT:** Open a NEW terminal (Terminal 2) while keeping the MCP server running in Terminal 1.
+
+**Run the webcam tool (Terminal 2):**
 ```bash
 # Activate virtual environment
 facial_mcp_py311\Scripts\activate  # Windows
@@ -248,9 +253,14 @@ python src/webcam_capture.py
 
 ### Running Automated Tests
 
-To test all MCP server functionality:
+To test all MCP server functionality, ensure the MCP server is running in Terminal 1, then run the test in a separate terminal.
 
+**Run automated tests (Terminal 2):**
 ```bash
+# Make sure virtual environment is activated
+facial_mcp_py311\Scripts\activate  # Windows
+# or: source facial_mcp_py311/bin/activate  # Linux/macOS
+
 python src/test_mcp_client.py
 ```
 
