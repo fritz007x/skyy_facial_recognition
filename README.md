@@ -54,18 +54,6 @@ This project enhances the Skyy AI platform by developing a facial recognition ca
    cd skyy_facial_recognition
    ```
 
-   **Verify the wheel file is present:**
-   ```bash
-   # Check that the InsightFace wheel file exists
-   ls -lh insightface-0.7.3-cp311-cp311-win_amd64.whl
-   # You should see: insightface-0.7.3-cp311-cp311-win_amd64.whl (852K)
-   ```
-
-   > **If the wheel file is missing**, download it manually:
-   > - The wheel file is included in the repository
-   > - If it's not present after cloning, download from the [GitHub Releases](https://github.com/fritz007x/skyy_facial_recognition/releases)
-   > - Or build it yourself (requires C++ build tools): `pip download insightface==0.7.3` then `pip wheel insightface-0.7.3.tar.gz`
-
 2. **Verify Python version**
 
    **IMPORTANT:** Ensure you're using Python 3.11.9. If you have multiple Python versions installed, specify the correct one:
