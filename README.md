@@ -41,7 +41,7 @@ This project enhances the Skyy AI platform by developing a facial recognition ca
 ## Setup Instructions
 
 ### Prerequisites
-- Python 3.11.9
+- **Python 3.11.9** (Required - other versions may not work with pre-compiled binaries)
 - Webcam or compatible camera device
 - Windows/Linux/macOS
 - Git
@@ -54,11 +54,43 @@ This project enhances the Skyy AI platform by developing a facial recognition ca
    cd skyy_facial_recognition
    ```
 
-2. **Create and activate virtual environment**
+2. **Verify Python version**
+
+   **IMPORTANT:** Ensure you're using Python 3.11.9. If you have multiple Python versions installed, specify the correct one:
+
+   ```bash
+   # Check Python version
+   python --version
+   # Should output: Python 3.11.9
+   ```
+
+   If you have multiple Python versions, use the full path or py launcher:
 
    Windows:
    ```bash
+   # Using py launcher (recommended)
+   py -3.11 --version
+
+   # Or use full path
+   C:\Users\YourUsername\AppData\Local\Programs\Python\Python311\python.exe --version
+   ```
+
+   Linux/macOS:
+   ```bash
+   python3.11 --version
+   ```
+
+3. **Create and activate virtual environment**
+
+   Windows:
+   ```bash
+   # If using default python (already version 3.11.9)
    python -m venv facial_mcp_py311
+
+   # OR if you have multiple versions, use py launcher
+   py -3.11 -m venv facial_mcp_py311
+
+   # Activate
    facial_mcp_py311\Scripts\activate
    ```
 
@@ -68,12 +100,17 @@ This project enhances the Skyy AI platform by developing a facial recognition ca
    source facial_mcp_py311/bin/activate
    ```
 
-3. **Install dependencies**
+   **Verify the virtual environment is using Python 3.11.9:**
+   ```bash
+   python --version  # Should show Python 3.11.9
+   ```
+
+4. **Install dependencies**
 
    **Windows (no C++ compiler):**
    ```bash
-   # Install InsightFace from pre-compiled binary
-   pip install insightface --prefer-binary
+   # Install InsightFace 0.7.3 from pre-compiled binary
+   pip install insightface==0.7.3 --prefer-binary
 
    # Install remaining dependencies
    pip install -r requirements.txt
@@ -86,12 +123,36 @@ This project enhances the Skyy AI platform by developing a facial recognition ca
 
    > **Alternative:** Use the included wheel file: `pip install insightface-0.7.3-cp311-cp311-win_amd64.whl`
    >
-   > See [INSTALL.md](INSTALL.md) for detailed installation instructions and troubleshooting.
+   > **Note:** The wheel file name `cp311` indicates it's for Python 3.11. If you get a "not supported" error, verify your Python version.
 
-4. **Verify installation**
+5. **Verify installation**
    ```bash
    python src/test_insightface_upgrade.py
    ```
+
+   This will verify:
+   - InsightFace version 0.7.3 or higher is installed
+   - FaceAnalysis model can initialize
+   - All dependencies are working correctly
+
+### Troubleshooting Installation
+
+**Old version of InsightFace installed:**
+- Specify the exact version: `pip install insightface==0.7.3 --prefer-binary`
+- Or use the wheel file: `pip install insightface-0.7.3-cp311-cp311-win_amd64.whl`
+- Verify: `pip show insightface` (should show version 0.7.3)
+
+**"Microsoft Visual C++ 14.0 is required":**
+- Use `--prefer-binary` flag: `pip install insightface==0.7.3 --prefer-binary`
+- Or use the wheel file directly
+
+**"Not a supported wheel" error:**
+- Verify Python version: `python --version` (must be 3.11.x)
+- If you have multiple Python versions, recreate the virtual environment using `py -3.11 -m venv facial_mcp_py311`
+
+**Missing models on first run:**
+- InsightFace downloads ~200MB of models on first initialization to `~/.insightface/models/buffalo_l/`
+- This is normal and only happens once
 
 ### Running the MCP Server
 
