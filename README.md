@@ -113,10 +113,11 @@ This project enhances the Skyy AI platform by developing a facial recognition ca
 
    ```bash
    # Install NumPy 1.x FIRST (before other packages)
-   pip install "numpy>=1.26.0,<2.0.0"
+   pip install "numpy==1.26.4"
 
-   # Install InsightFace from the included wheel file
-   pip install insightface-0.7.3-cp311-cp311-win_amd64.whl
+   # Install InsightFace from the wheel file WITHOUT dependencies
+   # (--no-deps prevents pip from uninstalling/reinstalling numpy)
+   pip install --no-deps insightface-0.7.3-cp311-cp311-win_amd64.whl
 
    # Install remaining dependencies
    pip install -r requirements.txt
@@ -127,6 +128,10 @@ This project enhances the Skyy AI platform by developing a facial recognition ca
 
    **Linux/macOS or Windows with C++ build tools:**
    ```bash
+   # Install NumPy first
+   pip install "numpy==1.26.4"
+
+   # Install all dependencies (including building InsightFace from source)
    pip install -r requirements.txt
    ```
 
@@ -148,12 +153,12 @@ This project enhances the Skyy AI platform by developing a facial recognition ca
 - This means NumPy 2.x was installed, but InsightFace wheel requires NumPy 1.x
 - **Solution:**
   ```bash
-  pip uninstall numpy opencv-python opencv-python-headless -y
-  pip install "numpy>=1.26.0,<2.0.0"
-  pip install insightface-0.7.3-cp311-cp311-win_amd64.whl
+  pip uninstall numpy opencv-python opencv-python-headless insightface -y
+  pip install "numpy==1.26.4"
+  pip install --no-deps insightface-0.7.3-cp311-cp311-win_amd64.whl
   pip install -r requirements.txt
   ```
-- The requirements.txt uses NumPy 1.x and opencv-python 4.10.x (compatible versions)
+- The `--no-deps` flag prevents the wheel from reinstalling numpy
 
 **Wheel file not found after cloning:**
 - The wheel file `insightface-0.7.3-cp311-cp311-win_amd64.whl` should be in the repository root
