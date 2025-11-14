@@ -69,6 +69,7 @@ facial_mcp_py311/
 .idea/
 .vscode/
 .claude/
+CLAUDE.md
 *.swp
 *.swo
 .project
