@@ -68,6 +68,7 @@ facial_mcp_py311/
 # IDE specific files
 .idea/
 .vscode/
+.claude/
 *.swp
 *.swo
 .project
