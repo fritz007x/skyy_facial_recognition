@@ -54,6 +54,18 @@ This project enhances the Skyy AI platform by developing a facial recognition ca
    cd skyy_facial_recognition
    ```
 
+   **Verify the wheel file is present:**
+   ```bash
+   # Check that the InsightFace wheel file exists
+   ls -lh insightface-0.7.3-cp311-cp311-win_amd64.whl
+   # You should see: insightface-0.7.3-cp311-cp311-win_amd64.whl (852K)
+   ```
+
+   > **If the wheel file is missing**, download it manually:
+   > - The wheel file is included in the repository
+   > - If it's not present after cloning, download from the [GitHub Releases](https://github.com/fritz007x/skyy_facial_recognition/releases)
+   > - Or build it yourself (requires C++ build tools): `pip download insightface==0.7.3` then `pip wheel insightface-0.7.3.tar.gz`
+
 2. **Verify Python version**
 
    **IMPORTANT:** Ensure you're using Python 3.11.9. If you have multiple Python versions installed, specify the correct one:
@@ -107,23 +119,30 @@ This project enhances the Skyy AI platform by developing a facial recognition ca
 
 4. **Install dependencies**
 
-   **Windows (no C++ compiler):**
+   **Windows (no C++ compiler) - REQUIRED METHOD:**
+
+   InsightFace 0.7.3 has NO pre-compiled binary on PyPI. You **MUST** use the included wheel file:
+
    ```bash
-   # Install InsightFace 0.7.3 from pre-compiled binary
-   pip install insightface==0.7.3 --prefer-binary
+   # IMPORTANT: Verify the wheel file is present first
+   ls insightface-0.7.3-cp311-cp311-win_amd64.whl
+
+   # Install InsightFace from the included wheel file
+   pip install insightface-0.7.3-cp311-cp311-win_amd64.whl
 
    # Install remaining dependencies
    pip install -r requirements.txt
    ```
+
+   > **Critical:** The wheel file `insightface-0.7.3-cp311-cp311-win_amd64.whl` is included in the repository.
+   > If you don't see it, download it from GitHub Releases or see troubleshooting section below.
 
    **Linux/macOS or Windows with C++ build tools:**
    ```bash
    pip install -r requirements.txt
    ```
 
-   > **Alternative:** Use the included wheel file: `pip install insightface-0.7.3-cp311-cp311-win_amd64.whl`
-   >
-   > **Note:** The wheel file name `cp311` indicates it's for Python 3.11. If you get a "not supported" error, verify your Python version.
+   > **Note:** The wheel file name `cp311` indicates it's compiled for Python 3.11. If you get a "not supported wheel" error, verify your Python version with `python --version`
 
 5. **Verify installation**
    ```bash
@@ -137,18 +156,28 @@ This project enhances the Skyy AI platform by developing a facial recognition ca
 
 ### Troubleshooting Installation
 
-**Old version of InsightFace installed:**
-- Specify the exact version: `pip install insightface==0.7.3 --prefer-binary`
-- Or use the wheel file: `pip install insightface-0.7.3-cp311-cp311-win_amd64.whl`
-- Verify: `pip show insightface` (should show version 0.7.3)
+**Wheel file not found after cloning:**
+- The wheel file `insightface-0.7.3-cp311-cp311-win_amd64.whl` should be in the repository root
+- If missing, download from: [GitHub Releases](https://github.com/fritz007x/skyy_facial_recognition/releases)
+- Or download from PyPI and build: `pip download insightface==0.7.3` (requires C++ tools to wheel the tarball)
+- Verify file size: Should be approximately 852KB
 
 **"Microsoft Visual C++ 14.0 is required":**
-- Use `--prefer-binary` flag: `pip install insightface==0.7.3 --prefer-binary`
-- Or use the wheel file directly
+- This means you tried `pip install insightface` which attempts to compile from source
+- **Solution:** Use the wheel file: `pip install insightface-0.7.3-cp311-cp311-win_amd64.whl`
+- **Important:** InsightFace 0.7.3 has NO pre-compiled binary on PyPI - the wheel file is the only option for Windows without C++ compiler
 
 **"Not a supported wheel" error:**
 - Verify Python version: `python --version` (must be 3.11.x)
-- If you have multiple Python versions, recreate the virtual environment using `py -3.11 -m venv facial_mcp_py311`
+- The wheel file `cp311` is ONLY for Python 3.11
+- If you have a different Python version, you need to either:
+  1. Install Python 3.11.9, or
+  2. Install C++ build tools to compile from source
+
+**"Old version of InsightFace installed":**
+- Uninstall first: `pip uninstall insightface`
+- Install from wheel: `pip install insightface-0.7.3-cp311-cp311-win_amd64.whl`
+- Verify: `pip show insightface` (should show version 0.7.3)
 
 **Missing models on first run:**
 - InsightFace downloads ~200MB of models on first initialization to `~/.insightface/models/buffalo_l/`

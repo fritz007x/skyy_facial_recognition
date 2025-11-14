@@ -110,5 +110,7 @@ node_modules/
 skyy_face_data/
 captured_image.txt
 *.whl
+# Exception: Include the InsightFace wheel needed for installation
+!insightface-0.7.3-cp311-cp311-win_amd64.whl
 python-*.exe
 
