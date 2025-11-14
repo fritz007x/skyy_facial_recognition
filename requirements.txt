@@ -29,6 +29,18 @@ opencv-python>=4.8.0,<4.13.0
 opencv-python-headless>=4.8.0,<4.13.0
 Pillow>=10.0.0,<=12.0.0
 
+# InsightFace Dependencies
+# Required by InsightFace but not installed with --no-deps
+tqdm>=4.66.0
+matplotlib>=3.8.0
+scipy>=1.13.0
+scikit-learn>=1.5.0
+scikit-image>=0.24.0
+cython>=3.0.0
+easydict>=1.13
+prettytable>=3.0.0
+albumentations>=1.3.0
+
 # Data Validation
 pydantic==2.12.3
 pydantic-settings==2.11.0
