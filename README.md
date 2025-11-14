@@ -51,7 +51,7 @@ This project enhances the Skyy AI platform by developing a facial recognition ca
 1. **Clone the repository**
    ```bash
    git clone https://github.com/fritz007x/skyy_facial_recognition.git
-   cd FACIAL_RECOGNITION_MCP
+   cd skyy_facial_recognition
    ```
 
 2. **Create and activate virtual environment**
@@ -72,11 +72,11 @@ This project enhances the Skyy AI platform by developing a facial recognition ca
 
    **Windows (no C++ compiler):**
    ```bash
-   # Install InsightFace from pre-compiled wheel
-   pip install insightface-0.7.3-cp311-cp311-win_amd64.whl
+   # Install InsightFace from pre-compiled binary
+   pip install insightface --prefer-binary
 
-   # Install other dependencies
-   pip install fastmcp mcp opencv-python opencv-python-headless Pillow onnx onnxruntime numpy pydantic pydantic-settings
+   # Install remaining dependencies
+   pip install -r requirements.txt
    ```
 
    **Linux/macOS or Windows with C++ build tools:**
@@ -84,6 +84,8 @@ This project enhances the Skyy AI platform by developing a facial recognition ca
    pip install -r requirements.txt
    ```
 
+   > **Alternative:** Use the included wheel file: `pip install insightface-0.7.3-cp311-cp311-win_amd64.whl`
+   >
    > See [INSTALL.md](INSTALL.md) for detailed installation instructions and troubleshooting.
 
 4. **Verify installation**
@@ -168,7 +170,7 @@ This will:
 ## Project Structure
 
 ```
-FACIAL_RECOGNITION_MCP/
+skyy_facial_recognition/
 ├── src/
 │   ├── skyy_facial_recognition_mcp.py  # MCP server implementation
 │   ├── webcam_capture.py               # Interactive testing tool
