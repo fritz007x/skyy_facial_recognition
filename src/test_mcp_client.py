@@ -15,7 +15,13 @@ import sys
 from pathlib import Path
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
-from src.webcam_capture import capture_from_webcam
+
+# Import from same directory
+try:
+    from webcam_capture import capture_from_webcam
+except ImportError:
+    # If running from project root
+    from src.webcam_capture import capture_from_webcam
 
 # ANSI color codes for terminal output
 class Colors:
