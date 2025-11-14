@@ -1,8 +1,9 @@
 # Skyy Facial Recognition MCP Server Dependencies
+# Versions based on working development environment
 
 # MCP Server Framework
-fastmcp>=2.13.0
-mcp>=1.20.0
+fastmcp==2.13.0.2
+mcp==1.20.0
 
 # Facial Recognition
 # IMPORTANT FOR WINDOWS: InsightFace 0.7.3 has NO binary on PyPI
@@ -10,22 +11,23 @@ mcp>=1.20.0
 #   pip install insightface-0.7.3-cp311-cp311-win_amd64.whl
 #
 # For Linux/macOS or Windows with C++ build tools:
-#   insightface>=0.7.3
+#   insightface==0.7.3
 # (Uncomment the line below only if you have C++ build tools installed)
-# insightface>=0.7.3
+# insightface==0.7.3
+
+# Deep Learning - MUST BE FIRST
+# CRITICAL: Install NumPy BEFORE opencv-python to prevent version conflicts
+# InsightFace 0.7.3 wheel requires NumPy 1.x
+numpy==1.26.4
+onnx==1.19.1
+onnxruntime==1.23.2
 
 # Image Processing
-opencv-python>=4.12.0
-opencv-python-headless>=4.12.0
-Pillow>=12.0.0
-
-# Deep Learning
-onnx>=1.19.0
-onnxruntime>=1.23.0
-# CRITICAL: InsightFace 0.7.3 wheel is compiled against NumPy 1.x
-# NumPy 2.x causes binary incompatibility errors
-numpy>=1.26.0,<2.0.0
+# opencv-python 4.12.0.88 works with NumPy 1.26.4 when NumPy is installed first
+opencv-python==4.12.0.88
+opencv-python-headless==4.12.0.88
+Pillow==12.0.0
 
 # Data Validation
-pydantic>=2.12.0
-pydantic-settings>=2.11.0
+pydantic==2.12.3
+pydantic-settings==2.11.0
