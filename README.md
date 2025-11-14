@@ -141,6 +141,15 @@ This project enhances the Skyy AI platform by developing a facial recognition ca
 
 ### Troubleshooting Installation
 
+**"numpy.dtype size changed, may indicate binary incompatibility":**
+- This means NumPy 2.x was installed, but InsightFace wheel requires NumPy 1.x
+- **Solution:**
+  ```bash
+  pip uninstall numpy
+  pip install "numpy>=1.26.0,<2.0.0"
+  ```
+- The requirements.txt now pins NumPy to 1.x to prevent this issue
+
 **Wheel file not found after cloning:**
 - The wheel file `insightface-0.7.3-cp311-cp311-win_amd64.whl` should be in the repository root
 - If missing, download from: [GitHub Releases](https://github.com/fritz007x/skyy_facial_recognition/releases)
