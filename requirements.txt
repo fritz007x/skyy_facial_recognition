@@ -19,14 +19,15 @@ mcp==1.20.0
 # CRITICAL: Install NumPy BEFORE opencv-python to prevent version conflicts
 # InsightFace 0.7.3 wheel requires NumPy 1.x
 numpy==1.26.4
-onnx==1.19.1
-onnxruntime==1.23.2
+# Use version ranges to allow pip to find compatible versions
+onnx>=1.15.0,<1.20.0
+onnxruntime>=1.16.0,<1.24.0
 
 # Image Processing
-# opencv-python 4.12.0.88 works with NumPy 1.26.4 when NumPy is installed first
-opencv-python==4.12.0.88
-opencv-python-headless==4.12.0.88
-Pillow==12.0.0
+# Allow pip to find opencv-python version compatible with numpy 1.26.4
+opencv-python>=4.8.0,<4.13.0
+opencv-python-headless>=4.8.0,<4.13.0
+Pillow>=10.0.0,<=12.0.0
 
 # Data Validation
 pydantic==2.12.3
