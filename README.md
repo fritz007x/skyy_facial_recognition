@@ -112,9 +112,6 @@ This project enhances the Skyy AI platform by developing a facial recognition ca
    InsightFace 0.7.3 has NO pre-compiled binary on PyPI. You **MUST** use the included wheel file:
 
    ```bash
-   # IMPORTANT: Verify the wheel file is present first
-   ls insightface-0.7.3-cp311-cp311-win_amd64.whl
-
    # Install InsightFace from the included wheel file
    pip install insightface-0.7.3-cp311-cp311-win_amd64.whl
 
