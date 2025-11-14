@@ -5,7 +5,10 @@ fastmcp>=2.13.0
 mcp>=1.20.0
 
 # Facial Recognition
-insightface>=0.7.3
+# Install from pre-compiled wheel to avoid C++ compiler requirement:
+# pip install insightface-0.7.3-cp311-cp311-win_amd64.whl
+# OR install from PyPI (requires C++ build tools):
+# insightface>=0.7.3
 
 # Image Processing
 opencv-python>=4.12.0

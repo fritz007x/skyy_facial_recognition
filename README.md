@@ -8,12 +8,6 @@ This project enhances the Skyy AI platform by developing a facial recognition ca
 
 *"MCP-integrated facial recognition for personalized Skyy interactions"*
 
-## Key Features
-
-- **User Enrollment**: Trigger-based registration with "Skyy, remember me" command
-- **Automatic Recognition**: Real-time facial recognition during user interactions
-- **Local-First Architecture**: All data processing and storage happens locally
-- **MCP Integration**: Seamless integration with Skyy's orchestration system
 
 ## Technical Stack
 
@@ -43,22 +37,6 @@ This project enhances the Skyy AI platform by developing a facial recognition ca
 - Command processing and routing
 - Event triggering and response management
 
-## Use Cases
-
-### Primary: User Recognition
-1. User approaches Skyy-enabled device
-2. Skyy captures image via camera
-3. System checks image against local database
-4. Match found → Skyy greets user by name
-5. No match → Standard greeting proceeds
-
-### Secondary: New User Registration
-1. User says "Skyy, remember me"
-2. Skyy activates registration mode
-3. Skyy prompts for user information
-4. Skyy captures facial image
-5. System stores data in local database
-6. Skyy confirms successful registration
 
 ## Setup Instructions
 
@@ -91,9 +69,22 @@ This project enhances the Skyy AI platform by developing a facial recognition ca
    ```
 
 3. **Install dependencies**
+
+   **Windows (no C++ compiler):**
+   ```bash
+   # Install InsightFace from pre-compiled wheel
+   pip install insightface-0.7.3-cp311-cp311-win_amd64.whl
+
+   # Install other dependencies
+   pip install fastmcp mcp opencv-python opencv-python-headless Pillow onnx onnxruntime numpy pydantic pydantic-settings
+   ```
+
+   **Linux/macOS or Windows with C++ build tools:**
    ```bash
    pip install -r requirements.txt
    ```
+
+   > See [INSTALL.md](INSTALL.md) for detailed installation instructions and troubleshooting.
 
 4. **Verify installation**
    ```bash
@@ -231,6 +222,6 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 
 - Model Context Protocol (MCP)
 - InsightFace library
-- Labeled Faces in the Wild (LFW) dataset
+
 
 ---
