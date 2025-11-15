@@ -123,8 +123,6 @@ This project enhances the Skyy AI platform by developing a facial recognition ca
    pip install -r requirements.txt
    ```
 
-   > **Critical:** The wheel file `insightface-0.7.3-cp311-cp311-win_amd64.whl` is included in the repository.
-   > If you don't see it, download it from GitHub Releases or see troubleshooting section below.
 
    **Linux/macOS or Windows with C++ build tools:**
    ```bash
