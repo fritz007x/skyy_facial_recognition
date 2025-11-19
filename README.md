@@ -137,7 +137,7 @@ This project enhances the Skyy AI platform by developing a facial recognition ca
 
 5. **Verify installation**
    ```bash
-   python src/test_insightface_upgrade.py
+   python src/tests/test_insightface_upgrade.py
    ```
 
    This will verify:
