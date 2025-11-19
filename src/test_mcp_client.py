@@ -162,8 +162,10 @@ async def test_mcp_server():
                 try:
                     result = await session.call_tool("skyy_get_database_stats",
                         arguments={
-                            "access_token": access_token,
-                            "response_format": "markdown"
+                            "params": {
+                                "access_token": access_token,
+                                "response_format": "markdown"
+                            }
                         }
                     )
                     print_result(result.content[0].text)
@@ -176,10 +178,12 @@ async def test_mcp_server():
                 try:
                     result = await session.call_tool("skyy_list_users",
                         arguments={
-                            "access_token": access_token,
-                            "limit": 20,
-                            "offset": 0,
-                            "response_format": "markdown"
+                            "params": {
+                                "access_token": access_token,
+                                "limit": 20,
+                                "offset": 0,
+                                "response_format": "markdown"
+                            }
                         }
                     )
                     print_result(result.content[0].text)
@@ -203,15 +207,17 @@ async def test_mcp_server():
                 try:
                     result = await session.call_tool("skyy_register_user",
                         arguments={
-                            "access_token": access_token,
-                            "name": "Test User",
-                            "image_data": image_data,
-                            "metadata": {
-                                "department": "Testing",
-                                "role": "MCP Test Subject",
-                                "test_timestamp": "2025-11-05"
-                            },
-                            "response_format": "markdown"
+                            "params": {
+                                "access_token": access_token,
+                                "name": "Test User",
+                                "image_data": image_data,
+                                "metadata": {
+                                    "department": "Testing",
+                                    "role": "MCP Test Subject",
+                                    "test_timestamp": "2025-11-05"
+                                },
+                                "response_format": "markdown"
+                            }
                         }
                     )
                     print_result(result.content[0].text)
@@ -238,10 +244,12 @@ async def test_mcp_server():
                 try:
                     result = await session.call_tool("skyy_recognize_face",
                         arguments={
-                            "access_token": access_token,
-                            "image_data": image_data,
-                            "confidence_threshold": 0.25,
-                            "response_format": "markdown"
+                            "params": {
+                                "access_token": access_token,
+                                "image_data": image_data,
+                                "confidence_threshold": 0.25,
+                                "response_format": "markdown"
+                            }
                         }
                     )
                     print_result(result.content[0].text)
@@ -255,9 +263,11 @@ async def test_mcp_server():
                     try:
                         result = await session.call_tool("skyy_get_user_profile",
                             arguments={
-                                "access_token": access_token,
-                                "user_id": user_id,
-                                "response_format": "markdown"
+                                "params": {
+                                    "access_token": access_token,
+                                    "user_id": user_id,
+                                    "response_format": "markdown"
+                                }
                             }
                         )
                         print_result(result.content[0].text)
@@ -270,15 +280,17 @@ async def test_mcp_server():
                     try:
                         result = await session.call_tool("skyy_update_user",
                             arguments={
-                                "access_token": access_token,
-                                "user_id": user_id,
-                                "name": "Updated Test User",
-                                "metadata": {
-                                    "department": "Testing - Updated",
-                                    "role": "Senior MCP Test Subject",
-                                    "updated": "true"
-                                },
-                                "response_format": "markdown"
+                                "params": {
+                                    "access_token": access_token,
+                                    "user_id": user_id,
+                                    "name": "Updated Test User",
+                                    "metadata": {
+                                        "department": "Testing - Updated",
+                                        "role": "Senior MCP Test Subject",
+                                        "updated": "true"
+                                    },
+                                    "response_format": "markdown"
+                                }
                             }
                         )
                         print_result(result.content[0].text)
@@ -293,9 +305,11 @@ async def test_mcp_server():
                         try:
                             result = await session.call_tool("skyy_delete_user",
                                 arguments={
-                                    "access_token": access_token,
-                                    "user_id": user_id,
-                                    "response_format": "markdown"
+                                    "params": {
+                                        "access_token": access_token,
+                                        "user_id": user_id,
+                                        "response_format": "markdown"
+                                    }
                                 }
                             )
                             print_result(result.content[0].text)
@@ -310,8 +324,10 @@ async def test_mcp_server():
                 try:
                     result = await session.call_tool("skyy_get_database_stats",
                         arguments={
-                            "access_token": access_token,
-                            "response_format": "markdown"
+                            "params": {
+                                "access_token": access_token,
+                                "response_format": "markdown"
+                            }
                         }
                     )
                     print_result(result.content[0].text)

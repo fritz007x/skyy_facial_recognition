@@ -156,11 +156,13 @@ async def capture_and_register_mode(access_token):
 
                 result = await session.call_tool("skyy_register_user",
                     arguments={
-                        "access_token": access_token,
-                        "name": name,
-                        "image_data": image_data,
-                        "metadata": metadata,
-                        "response_format": "markdown"
+                        "params": {
+                            "access_token": access_token,
+                            "name": name,
+                            "image_data": image_data,
+                            "metadata": metadata,
+                            "response_format": "markdown"
+                        }
                     }
                 )
 
@@ -204,10 +206,12 @@ async def recognize_face_mode(access_token):
 
                 result = await session.call_tool("skyy_recognize_face",
                     arguments={
-                        "access_token": access_token,
-                        "image_data": image_data,
-                        "confidence_threshold": threshold,
-                        "response_format": "markdown"
+                        "params": {
+                            "access_token": access_token,
+                            "image_data": image_data,
+                            "confidence_threshold": threshold,
+                            "response_format": "markdown"
+                        }
                     }
                 )
 
@@ -265,10 +269,12 @@ async def live_recognition_mode(access_token):
                         # Recognize face
                         result = await session.call_tool("skyy_recognize_face",
                             arguments={
-                                "access_token": access_token,
-                                "image_data": image_base64,
-                                "confidence_threshold": 0.25,
-                                "response_format": "json"
+                                "params": {
+                                    "access_token": access_token,
+                                    "image_data": image_base64,
+                                    "confidence_threshold": 0.25,
+                                    "response_format": "json"
+                                }
                             }
                         )
 
@@ -306,10 +312,12 @@ async def list_users_mode(access_token):
 
                 result = await session.call_tool("skyy_list_users",
                     arguments={
-                        "access_token": access_token,
-                        "limit": 50,
-                        "offset": 0,
-                        "response_format": "markdown"
+                        "params": {
+                            "access_token": access_token,
+                            "limit": 50,
+                            "offset": 0,
+                            "response_format": "markdown"
+                        }
                     }
                 )
 
@@ -330,8 +338,10 @@ async def database_stats_mode(access_token):
 
                 result = await session.call_tool("skyy_get_database_stats",
                     arguments={
-                        "access_token": access_token,
-                        "response_format": "markdown"
+                        "params": {
+                            "access_token": access_token,
+                            "response_format": "markdown"
+                        }
                     }
                 )
 
