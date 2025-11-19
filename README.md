@@ -12,10 +12,11 @@ This project enhances the Skyy AI platform by developing a facial recognition ca
 ## Technical Stack
 
 - **Facial Recognition**: InsightFace with buffalo_l model pack
-- **Vector Database**: ChromaDB for facial embeddings storage
+- **Data Storage**: JSON-based database for user metadata and local file storage for images
 - **Computer Vision**: OpenCV for camera interface
 - **Protocol**: Model Context Protocol (MCP) for Skyy integration
-- **Language**: Python 3.x
+- **Authentication**: OAuth 2.1 with RS256 JWT tokens
+- **Language**: Python 3.11.9
 
 ## Project Components
 
@@ -29,9 +30,10 @@ This project enhances the Skyy AI platform by developing a facial recognition ca
 - Face matching with confidence scoring
 
 ### 3. Data Storage Layer
-- Local ChromaDB vector database
-- Metadata management (names, timestamps)
-- JSON-based indexing structure
+- JSON-based user database (index.json)
+- Local file storage for face images
+- Metadata management (names, timestamps, custom fields)
+- Facial embeddings stored in-memory during recognition
 
 ### 4. MCP Integration Layer
 - Command processing and routing
