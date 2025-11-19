@@ -119,3 +119,9 @@ python-*.exe
 # OAuth 2.1 sensitive data
 oauth_data/
 
+# Temporary debug/test files
+OAUTH_DEBUGGING_REPORT.md
+test_decorator_validation.py
+test_oauth_simple.py
+test_token_validation.py
+
