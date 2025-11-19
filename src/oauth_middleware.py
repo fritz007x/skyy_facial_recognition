@@ -61,10 +61,13 @@ def require_auth(func: Callable) -> Callable:
                 "Invalid or expired access token. Please obtain a new token."
             )
 
-        # Add client_id to kwargs for the tool to use if needed
-        kwargs['_client_id'] = payload['sub']
+        # Store client_id for potential use by the tool
+        # Note: We don't add it to kwargs because Pydantic models have extra='forbid'
+        # Tools can access it via get_client_id_from_context() if needed
+        client_id = payload['sub']
 
-        # Call the original function
+        # Call the original function without modifying kwargs
+        # (Pydantic models reject unexpected kwargs)
         return await func(*args, **kwargs)
 
     return wrapper
