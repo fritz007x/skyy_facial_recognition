@@ -7,7 +7,11 @@ Provides token validation for MCP tool calls.
 from functools import wraps
 from typing import Optional, Callable, Any
 import json
-from .oauth_config import oauth_config
+
+try:
+    from .oauth_config import oauth_config
+except ImportError:
+    from oauth_config import oauth_config
 
 
 class AuthenticationError(Exception):

@@ -264,6 +264,47 @@ python src/oauth_admin.py get-token \
 - **Secure Storage**: Private keys and client secrets stored in `oauth_data/` (excluded from git)
 - **Client Credentials Flow**: Server-to-server authentication without user interaction
 
+### Testing OAuth Implementation
+
+Run the comprehensive OAuth test suite to verify the implementation:
+
+```bash
+# Activate virtual environment
+facial_mcp_py311\Scripts\activate  # Windows
+
+# Run OAuth tests
+python src/test_oauth.py
+```
+
+The test suite validates:
+- RSA key generation and loading
+- Client creation and management
+- Token generation and validation
+- Invalid/expired token handling
+- Authentication decorator functionality
+
+**Example output:**
+```
+======================================================================
+                         OAuth 2.1 Test Suite
+======================================================================
+
+> Test 1: RSA Key Generation and Loading
+  [OK] RSA keys generated and loaded successfully
+  [i] Private key: oauth_data\private_key.pem
+  [i] Public key: oauth_data\public_key.pem
+
+...
+
+Total Tests:  9
+Passed:       9
+Failed:       0
+
+Success Rate: 100.0%
+
+[OK] ALL TESTS PASSED!
+```
+
 ### Running the MCP Server
 
 The MCP server provides tools for facial recognition that can be integrated with MCP-compatible clients.
