@@ -92,8 +92,19 @@ def capture_from_webcam():
 
 async def get_mcp_session():
     """Create and return an MCP session."""
-    python_path = Path("facial_mcp_py311/Scripts/python.exe").absolute()
-    server_script = Path("src/skyy_facial_recognition_mcp.py").absolute()
+    # Get the absolute path to the project root (parent of src directory)
+    script_dir = Path(__file__).parent.absolute()  # src directory
+    project_root = script_dir.parent  # project root
+
+    # Build absolute paths from project root
+    python_path = project_root / "facial_mcp_py311" / "Scripts" / "python.exe"
+    server_script = project_root / "src" / "skyy_facial_recognition_mcp.py"
+
+    # Verify paths exist
+    if not python_path.exists():
+        raise FileNotFoundError(f"Python interpreter not found at: {python_path}")
+    if not server_script.exists():
+        raise FileNotFoundError(f"MCP server script not found at: {server_script}")
 
     server_params = StdioServerParameters(
         command=str(python_path),
