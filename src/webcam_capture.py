@@ -15,6 +15,12 @@ from pathlib import Path
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
 
+# Import OAuth config
+try:
+    from oauth_config import oauth_config
+except ImportError:
+    from src.oauth_config import oauth_config
+
 # ANSI color codes for terminal output
 class Colors:
     GREEN = '\033[92m'
@@ -24,6 +30,27 @@ class Colors:
     CYAN = '\033[96m'
     RESET = '\033[0m'
     BOLD = '\033[1m'
+
+def setup_oauth():
+    """Setup OAuth client and generate access token."""
+    # Create a webcam client
+    client_id = "webcam_tool_client"
+
+    # Check if client already exists, if not create it
+    clients = oauth_config.load_clients()
+    if client_id not in clients:
+        print(f"{Colors.BLUE}[i] Creating OAuth client for webcam tool...{Colors.RESET}")
+        credentials = oauth_config.create_client(
+            client_id=client_id,
+            client_name="Webcam Tool Client"
+        )
+        print(f"{Colors.GREEN}[OK] OAuth client created{Colors.RESET}")
+
+    # Generate access token
+    access_token = oauth_config.create_access_token(client_id)
+    print(f"{Colors.GREEN}[OK] Access token generated (expires in {oauth_config.ACCESS_TOKEN_EXPIRE_MINUTES} minutes){Colors.RESET}")
+
+    return access_token
 
 def capture_from_webcam():
     """Capture a single frame from webcam and return as base64."""
@@ -77,7 +104,7 @@ async def get_mcp_session():
     return stdio_client(server_params)
 
 
-async def capture_and_register_mode():
+async def capture_and_register_mode(access_token):
     """Capture image and optionally register a new user."""
     print(f"\n{Colors.BOLD}{Colors.CYAN}=== CAPTURE & REGISTER ==={Colors.RESET}\n")
 
@@ -129,12 +156,11 @@ async def capture_and_register_mode():
 
                 result = await session.call_tool("skyy_register_user",
                     arguments={
-                        "params": {
-                            "name": name,
-                            "image_data": image_data,
-                            "metadata": metadata,
-                            "response_format": "markdown"
-                        }
+                        "access_token": access_token,
+                        "name": name,
+                        "image_data": image_data,
+                        "metadata": metadata,
+                        "response_format": "markdown"
                     }
                 )
 
@@ -144,7 +170,7 @@ async def capture_and_register_mode():
         print(f"{Colors.RED}Error: {e}{Colors.RESET}")
 
 
-async def recognize_face_mode():
+async def recognize_face_mode(access_token):
     """Capture image and recognize the person."""
     print(f"\n{Colors.BOLD}{Colors.CYAN}=== RECOGNIZE FACE ==={Colors.RESET}\n")
 
@@ -178,11 +204,10 @@ async def recognize_face_mode():
 
                 result = await session.call_tool("skyy_recognize_face",
                     arguments={
-                        "params": {
-                            "image_data": image_data,
-                            "confidence_threshold": threshold,
-                            "response_format": "markdown"
-                        }
+                        "access_token": access_token,
+                        "image_data": image_data,
+                        "confidence_threshold": threshold,
+                        "response_format": "markdown"
                     }
                 )
 
@@ -192,7 +217,7 @@ async def recognize_face_mode():
         print(f"{Colors.RED}Error: {e}{Colors.RESET}")
 
 
-async def live_recognition_mode():
+async def live_recognition_mode(access_token):
     """Continuous face recognition from webcam feed."""
     print(f"\n{Colors.BOLD}{Colors.CYAN}=== LIVE RECOGNITION MODE ==={Colors.RESET}\n")
     print(f"{Colors.YELLOW}Press 'r' to recognize current frame, 'q' to quit{Colors.RESET}\n")
@@ -240,11 +265,10 @@ async def live_recognition_mode():
                         # Recognize face
                         result = await session.call_tool("skyy_recognize_face",
                             arguments={
-                                "params": {
-                                    "image_data": image_base64,
-                                    "confidence_threshold": 0.25,
-                                    "response_format": "json"
-                                }
+                                "access_token": access_token,
+                                "image_data": image_base64,
+                                "confidence_threshold": 0.25,
+                                "response_format": "json"
                             }
                         )
 
@@ -271,7 +295,7 @@ async def live_recognition_mode():
     cv2.destroyAllWindows()
 
 
-async def list_users_mode():
+async def list_users_mode(access_token):
     """List all registered users."""
     print(f"\n{Colors.BOLD}{Colors.CYAN}=== REGISTERED USERS ==={Colors.RESET}\n")
 
@@ -282,11 +306,10 @@ async def list_users_mode():
 
                 result = await session.call_tool("skyy_list_users",
                     arguments={
-                        "params": {
-                            "limit": 50,
-                            "offset": 0,
-                            "response_format": "markdown"
-                        }
+                        "access_token": access_token,
+                        "limit": 50,
+                        "offset": 0,
+                        "response_format": "markdown"
                     }
                 )
 
@@ -296,7 +319,7 @@ async def list_users_mode():
         print(f"{Colors.RED}Error: {e}{Colors.RESET}")
 
 
-async def database_stats_mode():
+async def database_stats_mode(access_token):
     """Show database statistics."""
     print(f"\n{Colors.BOLD}{Colors.CYAN}=== DATABASE STATISTICS ==={Colors.RESET}\n")
 
@@ -306,7 +329,10 @@ async def database_stats_mode():
                 await session.initialize()
 
                 result = await session.call_tool("skyy_get_database_stats",
-                    arguments={"response_format": "markdown"}
+                    arguments={
+                        "access_token": access_token,
+                        "response_format": "markdown"
+                    }
                 )
 
                 print(f"{Colors.GREEN}{result.content[0].text}{Colors.RESET}")
@@ -335,6 +361,11 @@ def show_menu():
 
 async def main():
     """Main application loop."""
+    # Setup OAuth and get access token
+    print(f"\n{Colors.BOLD}{Colors.CYAN}Setting up OAuth authentication...{Colors.RESET}\n")
+    access_token = setup_oauth()
+    print()
+
     while True:
         show_menu()
         choice = input(f"{Colors.CYAN}Enter your choice: {Colors.RESET}").strip()
@@ -343,15 +374,15 @@ async def main():
             print(f"{Colors.YELLOW}Goodbye!{Colors.RESET}")
             break
         elif choice == '1':
-            await capture_and_register_mode()
+            await capture_and_register_mode(access_token)
         elif choice == '2':
-            await recognize_face_mode()
+            await recognize_face_mode(access_token)
         elif choice == '3':
-            await live_recognition_mode()
+            await live_recognition_mode(access_token)
         elif choice == '4':
-            await list_users_mode()
+            await list_users_mode(access_token)
         elif choice == '5':
-            await database_stats_mode()
+            await database_stats_mode(access_token)
         else:
             print(f"{Colors.RED}Invalid choice. Please try again.{Colors.RESET}")
 

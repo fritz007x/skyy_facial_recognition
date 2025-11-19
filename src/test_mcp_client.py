@@ -2,6 +2,7 @@
 Test client for Skyy Facial Recognition MCP Server
 
 This script tests all the tools provided by the MCP server:
+- OAuth authentication
 - Database statistics
 - User registration
 - Face recognition
@@ -15,6 +16,12 @@ import sys
 from pathlib import Path
 from mcp import ClientSession, StdioServerParameters
 from mcp.client.stdio import stdio_client
+
+# Import OAuth config
+try:
+    from oauth_config import oauth_config
+except ImportError:
+    from src.oauth_config import oauth_config
 
 # Import from same directory
 try:
@@ -42,15 +49,15 @@ def print_header(text):
 
 def print_success(text):
     """Print success message."""
-    print(f"{Colors.GREEN}✓ {text}{Colors.RESET}")
+    print(f"{Colors.GREEN}[OK] {text}{Colors.RESET}")
 
 def print_error(text):
     """Print error message."""
-    print(f"{Colors.RED}✗ {text}{Colors.RESET}")
+    print(f"{Colors.RED}[X] {text}{Colors.RESET}")
 
 def print_info(text):
     """Print info message."""
-    print(f"{Colors.BLUE}ℹ {text}{Colors.RESET}")
+    print(f"{Colors.BLUE}[i] {text}{Colors.RESET}")
 
 def print_result(result):
     """Print tool result."""
@@ -85,10 +92,43 @@ def load_test_image():
 
     return None
 
+def setup_oauth():
+    """Setup OAuth client and generate access token."""
+    print_header("OAuth 2.1 Setup")
+
+    # Create a test client
+    client_id = "test_mcp_client"
+
+    # Check if client already exists, if not create it
+    clients = oauth_config.load_clients()
+    if client_id not in clients:
+        print_info("Creating OAuth test client...")
+        credentials = oauth_config.create_client(
+            client_id=client_id,
+            client_name="MCP Test Client"
+        )
+        client_secret = credentials['client_secret']
+        print_success(f"OAuth client created: {client_id}")
+    else:
+        # Get existing client secret
+        client_secret = clients[client_id]['client_secret']
+        print_info(f"Using existing OAuth client: {client_id}")
+
+    # Generate access token
+    print_info("Generating access token...")
+    access_token = oauth_config.create_access_token(client_id)
+    print_success(f"Access token generated (expires in {oauth_config.ACCESS_TOKEN_EXPIRE_MINUTES} minutes)")
+    print_info(f"Token: {access_token[:50]}...")
+
+    return access_token
+
 async def test_mcp_server():
     """Test all MCP server tools."""
 
     print_header("Skyy Facial Recognition MCP Server Test")
+
+    # Setup OAuth and get access token
+    access_token = setup_oauth()
 
     # Server parameters
     python_path = Path("facial_mcp_py311/Scripts/python.exe").absolute()
@@ -121,7 +161,10 @@ async def test_mcp_server():
                 print_header("Test 1: Get Database Statistics")
                 try:
                     result = await session.call_tool("skyy_get_database_stats",
-                        arguments={"response_format": "markdown"}
+                        arguments={
+                            "access_token": access_token,
+                            "response_format": "markdown"
+                        }
                     )
                     print_result(result.content[0].text)
                     print_success("Database stats retrieved")
@@ -133,11 +176,10 @@ async def test_mcp_server():
                 try:
                     result = await session.call_tool("skyy_list_users",
                         arguments={
-                            "params": {
-                                "limit": 20,
-                                "offset": 0,
-                                "response_format": "markdown"
-                            }
+                            "access_token": access_token,
+                            "limit": 20,
+                            "offset": 0,
+                            "response_format": "markdown"
                         }
                     )
                     print_result(result.content[0].text)
@@ -161,16 +203,15 @@ async def test_mcp_server():
                 try:
                     result = await session.call_tool("skyy_register_user",
                         arguments={
-                            "params": {
-                                "name": "Test User",
-                                "image_data": image_data,
-                                "metadata": {
-                                    "department": "Testing",
-                                    "role": "MCP Test Subject",
-                                    "test_timestamp": "2025-11-05"
-                                },
-                                "response_format": "markdown"
-                            }
+                            "access_token": access_token,
+                            "name": "Test User",
+                            "image_data": image_data,
+                            "metadata": {
+                                "department": "Testing",
+                                "role": "MCP Test Subject",
+                                "test_timestamp": "2025-11-05"
+                            },
+                            "response_format": "markdown"
                         }
                     )
                     print_result(result.content[0].text)
@@ -197,11 +238,10 @@ async def test_mcp_server():
                 try:
                     result = await session.call_tool("skyy_recognize_face",
                         arguments={
-                            "params": {
-                                "image_data": image_data,
-                                "confidence_threshold": 0.25,
-                                "response_format": "markdown"
-                            }
+                            "access_token": access_token,
+                            "image_data": image_data,
+                            "confidence_threshold": 0.25,
+                            "response_format": "markdown"
                         }
                     )
                     print_result(result.content[0].text)
@@ -215,10 +255,9 @@ async def test_mcp_server():
                     try:
                         result = await session.call_tool("skyy_get_user_profile",
                             arguments={
-                                "params": {
-                                    "user_id": user_id,
-                                    "response_format": "markdown"
-                                }
+                                "access_token": access_token,
+                                "user_id": user_id,
+                                "response_format": "markdown"
                             }
                         )
                         print_result(result.content[0].text)
@@ -231,16 +270,15 @@ async def test_mcp_server():
                     try:
                         result = await session.call_tool("skyy_update_user",
                             arguments={
-                                "params": {
-                                    "user_id": user_id,
-                                    "name": "Updated Test User",
-                                    "metadata": {
-                                        "department": "Testing - Updated",
-                                        "role": "Senior MCP Test Subject",
-                                        "updated": "true"
-                                    },
-                                    "response_format": "markdown"
-                                }
+                                "access_token": access_token,
+                                "user_id": user_id,
+                                "name": "Updated Test User",
+                                "metadata": {
+                                    "department": "Testing - Updated",
+                                    "role": "Senior MCP Test Subject",
+                                    "updated": "true"
+                                },
+                                "response_format": "markdown"
                             }
                         )
                         print_result(result.content[0].text)
@@ -255,10 +293,9 @@ async def test_mcp_server():
                         try:
                             result = await session.call_tool("skyy_delete_user",
                                 arguments={
-                                    "params": {
-                                        "user_id": user_id,
-                                        "response_format": "markdown"
-                                    }
+                                    "access_token": access_token,
+                                    "user_id": user_id,
+                                    "response_format": "markdown"
                                 }
                             )
                             print_result(result.content[0].text)
@@ -272,7 +309,10 @@ async def test_mcp_server():
                 print_header("Final Database Statistics")
                 try:
                     result = await session.call_tool("skyy_get_database_stats",
-                        arguments={"response_format": "markdown"}
+                        arguments={
+                            "access_token": access_token,
+                            "response_format": "markdown"
+                        }
                     )
                     print_result(result.content[0].text)
                 except Exception as e:
