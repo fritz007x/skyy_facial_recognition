@@ -12,7 +12,7 @@ from pathlib import Path
 import json
 
 # Add src to path for imports
-sys.path.insert(0, str(Path(__file__).parent))
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
 # Import with absolute imports
 import oauth_config as oauth_config_module
@@ -435,15 +435,18 @@ class OAuthTester:
 
             # Create a test function with auth decorator
             @require_auth
-            async def test_function(params: TestInput, **kwargs):
-                return f"Success: {params.data}, Client: {kwargs.get('_client_id')}"
+            async def test_function(params: TestInput):
+                # Note: _client_id is no longer passed in kwargs due to Pydantic compatibility
+                # The decorator validates the token but doesn't inject client_id to avoid
+                # conflicts with Pydantic models that have extra='forbid'
+                return f"Success: {params.data}"
 
             # Test with valid token
             import asyncio
             test_input = TestInput(access_token=self.test_token, data="test")
             result = asyncio.run(test_function(test_input))
 
-            if "Success" in result and self.test_client_id in result:
+            if "Success" in result:
                 print_success("Authentication decorator works with valid token")
             else:
                 print_error(f"Unexpected result: {result}")

@@ -28,6 +28,8 @@ from io import BytesIO
 from PIL import Image
 import insightface
 from insightface.app import FaceAnalysis
+import chromadb
+from chromadb.config import Settings
 
 # OAuth 2.1 Authentication
 from oauth_middleware import require_auth, AuthenticationError, create_auth_error_response
@@ -40,11 +42,13 @@ CHARACTER_LIMIT = 25000
 DATABASE_PATH = Path("./skyy_face_data")
 IMAGES_PATH = DATABASE_PATH / "images"
 INDEX_FILE = DATABASE_PATH / "index.json"
+CHROMA_PATH = DATABASE_PATH / "chroma_db"
 MIN_CONFIDENCE_THRESHOLD = 0.25  # InsightFace similarity threshold (0.0-1.0, lower is stricter)
 
 # Ensure directories exist
 DATABASE_PATH.mkdir(parents=True, exist_ok=True)
 IMAGES_PATH.mkdir(parents=True, exist_ok=True)
+CHROMA_PATH.mkdir(parents=True, exist_ok=True)
 
 # Initialize InsightFace
 # Using buffalo_l model for good balance of speed and accuracy
@@ -57,6 +61,30 @@ def initialize_face_app():
         face_app = FaceAnalysis(name='buffalo_l', providers=['CPUExecutionProvider'])
         face_app.prepare(ctx_id=0, det_size=(640, 640))
     return face_app
+
+
+# Initialize ChromaDB
+# Using persistent client with cosine similarity for face embeddings
+chroma_client = None
+chroma_collection = None
+
+def initialize_chroma():
+    """Initialize ChromaDB client and collection lazily."""
+    global chroma_client, chroma_collection
+    if chroma_client is None:
+        chroma_client = chromadb.PersistentClient(
+            path=str(CHROMA_PATH),
+            settings=Settings(
+                anonymized_telemetry=False,
+                allow_reset=True
+            )
+        )
+        # Get or create collection with cosine similarity
+        chroma_collection = chroma_client.get_or_create_collection(
+            name="face_embeddings",
+            metadata={"hnsw:space": "cosine"}  # Cosine similarity for face embeddings
+        )
+    return chroma_collection
 
 
 # ============================================================================
@@ -290,16 +318,97 @@ class GetDatabaseStatsInput(BaseModel):
 # Database Helper Functions
 # ============================================================================
 
+def migrate_json_to_chroma(db: Dict[str, Any]) -> None:
+    """
+    Migrate existing JSON database to ChromaDB.
+
+    This function checks if embeddings exist in the JSON database but not in ChromaDB,
+    and migrates them. It marks the database as migrated once complete.
+
+    Args:
+        db: The JSON database dictionary
+    """
+    # Check if migration is already done
+    if db.get("metadata", {}).get("chroma_migrated", False):
+        return
+
+    # Initialize ChromaDB
+    collection = initialize_chroma()
+
+    users = db.get("users", {})
+    if not users:
+        # No users to migrate, mark as done
+        if "metadata" not in db:
+            db["metadata"] = {}
+        db["metadata"]["chroma_migrated"] = True
+        return
+
+    migrated_count = 0
+    for user_id, user_data in users.items():
+        # Check if user has facial features with embeddings
+        facial_features = user_data.get("facial_features", {})
+        if "feature_vector" in facial_features:
+            # Check if already in ChromaDB
+            try:
+                existing = collection.get(ids=[user_id])
+                if not existing["ids"]:  # User not in ChromaDB
+                    # Add to ChromaDB
+                    collection.add(
+                        ids=[user_id],
+                        embeddings=[facial_features["feature_vector"]],
+                        metadatas=[{
+                            "user_id": user_id,
+                            "name": user_data["name"],
+                            "registration_timestamp": user_data.get("registration_timestamp", "")
+                        }]
+                    )
+                    migrated_count += 1
+            except Exception as e:
+                print(f"Warning: Failed to migrate user {user_id} to ChromaDB: {e}")
+
+    # Mark as migrated
+    if "metadata" not in db:
+        db["metadata"] = {}
+    db["metadata"]["chroma_migrated"] = True
+
+    if migrated_count > 0:
+        print(f"Migrated {migrated_count} users from JSON to ChromaDB")
+
+
 def load_database() -> Dict[str, Any]:
-    """Load the facial recognition database from disk."""
+    """
+    Load the facial recognition database from both JSON and ChromaDB.
+
+    The JSON file stores metadata, image paths, and additional user information.
+    ChromaDB stores the facial embeddings for efficient similarity search.
+
+    Returns:
+        Dict containing users and metadata
+    """
     if INDEX_FILE.exists():
         with open(INDEX_FILE, 'r') as f:
-            return json.load(f)
-    return {"users": {}, "metadata": {"version": "1.0", "created": datetime.utcnow().isoformat()}}
+            db = json.load(f)
+    else:
+        db = {"users": {}, "metadata": {"version": "1.0", "created": datetime.utcnow().isoformat()}}
+
+    # Initialize ChromaDB
+    initialize_chroma()
+
+    # Migrate existing data if needed
+    migrate_json_to_chroma(db)
+
+    return db
 
 
 def save_database(db: Dict[str, Any]) -> None:
-    """Save the facial recognition database to disk."""
+    """
+    Save the facial recognition database to disk.
+
+    Saves metadata to JSON file. Embeddings are saved to ChromaDB separately.
+
+    Args:
+        db: Database dictionary to save
+    """
     with open(INDEX_FILE, 'w') as f:
         json.dump(db, f, indent=2)
 
@@ -626,29 +735,50 @@ async def register_user(params: RegisterUserInput) -> str:
     try:
         # Load database
         db = load_database()
-        
+
         # Generate unique user ID
         user_id = generate_user_id(params.name)
-        
+
         # Extract facial features using InsightFace
         facial_features = extract_facial_features(params.image_data)
-        
+
         # Save image to disk
         image_path = save_image(user_id, params.image_data)
-        
-        # Create user record
+
+        # Create user record (excluding embedding for JSON storage)
+        # Embeddings are stored in ChromaDB, not JSON
         user_record = {
             "user_id": user_id,
             "name": params.name,
             "image_path": image_path,
-            "facial_features": facial_features,
+            "facial_features": {
+                # Store metadata about the face, but not the full embedding
+                "bbox": facial_features["bbox"],
+                "detection_score": facial_features["detection_score"],
+                "extraction_timestamp": facial_features["extraction_timestamp"],
+                "landmark_quality": facial_features["landmark_quality"],
+                "face_size_ratio": facial_features["face_size_ratio"],
+                "num_faces_detected": facial_features["num_faces_detected"]
+            },
             "metadata": params.metadata,
             "registration_timestamp": datetime.utcnow().isoformat(),
             "recognition_count": 0,
             "last_recognized": None
         }
-        
-        # Add to database
+
+        # Add embedding to ChromaDB
+        collection = initialize_chroma()
+        collection.add(
+            ids=[user_id],
+            embeddings=[facial_features["feature_vector"]],
+            metadatas=[{
+                "user_id": user_id,
+                "name": params.name,
+                "registration_timestamp": user_record["registration_timestamp"]
+            }]
+        )
+
+        # Add to JSON database
         db["users"][user_id] = user_record
         save_database(db)
         
@@ -766,34 +896,79 @@ async def recognize_face(params: RecognizeFaceInput) -> str:
         # Load database
         db = load_database()
         users = db.get("users", {})
-        
+
         if not users:
             result = {
                 "status": RecognitionStatus.NOT_RECOGNIZED.value,
                 "message": "No users registered in the database",
                 "distance": 1.0
             }
-            
+
             if params.response_format == ResponseFormat.JSON:
                 return json.dumps(result, indent=2)
             else:
                 return "# ℹ️ No Users Registered\n\nThere are no users in the database yet. Use `skyy_register_user` to register users."
-        
+
         # Extract features from input image
         input_features = extract_facial_features(params.image_data)
-        
-        # Compare with all registered users
-        best_match = None
-        best_distance = float('inf')
-        
-        for user_id, user_data in users.items():
-            stored_features = user_data.get("facial_features", {})
-            distance = compare_faces(input_features, stored_features)
-            
-            if distance < best_distance:
-                best_distance = distance
-                best_match = user_data
-        
+
+        # Query ChromaDB for nearest neighbor
+        collection = initialize_chroma()
+
+        # Check if collection has any items
+        collection_count = collection.count()
+        if collection_count == 0:
+            result = {
+                "status": RecognitionStatus.NOT_RECOGNIZED.value,
+                "message": "No users registered in the database",
+                "distance": 1.0
+            }
+
+            if params.response_format == ResponseFormat.JSON:
+                return json.dumps(result, indent=2)
+            else:
+                return "# ℹ️ No Users Registered\n\nThere are no users in the database yet. Use `skyy_register_user` to register users."
+
+        # Query ChromaDB with the input embedding
+        # ChromaDB returns cosine distance (0 = identical, 2 = opposite)
+        results = collection.query(
+            query_embeddings=[input_features["feature_vector"]],
+            n_results=1  # Get the closest match
+        )
+
+        # Extract results
+        if not results["ids"] or not results["ids"][0]:
+            result = {
+                "status": RecognitionStatus.NOT_RECOGNIZED.value,
+                "message": "No matching user found in database",
+                "distance": 1.0
+            }
+
+            if params.response_format == ResponseFormat.JSON:
+                return json.dumps(result, indent=2)
+            else:
+                return format_recognition_result_markdown(result)
+
+        # Get the best match
+        best_user_id = results["ids"][0][0]
+        best_distance = results["distances"][0][0]  # ChromaDB cosine distance
+
+        # Get full user data from JSON database
+        best_match = users.get(best_user_id)
+
+        if not best_match:
+            # This shouldn't happen, but handle gracefully
+            result = {
+                "status": RecognitionStatus.ERROR.value,
+                "message": "Database inconsistency detected",
+                "distance": best_distance
+            }
+
+            if params.response_format == ResponseFormat.JSON:
+                return json.dumps(result, indent=2)
+            else:
+                return format_recognition_result_markdown(result)
+
         # Determine recognition status based on distance
         # Lower distance = better match
         if best_distance <= params.confidence_threshold:
@@ -1176,13 +1351,20 @@ async def delete_user(params: DeleteUserInput) -> str:
         
         user_data = users[params.user_id]
         user_name = user_data["name"]
-        
+
         # Delete image file
         image_path = Path(user_data["image_path"])
         if image_path.exists():
             image_path.unlink()
-        
-        # Remove from database
+
+        # Remove from ChromaDB
+        collection = initialize_chroma()
+        try:
+            collection.delete(ids=[params.user_id])
+        except Exception as e:
+            print(f"Warning: Failed to delete user from ChromaDB: {e}")
+
+        # Remove from JSON database
         del users[params.user_id]
         save_database(db)
         
