@@ -39,9 +39,14 @@ def require_auth(func: Callable) -> Callable:
         # Check if first argument has access_token attribute
         if args and hasattr(args[0], 'access_token'):
             token = args[0].access_token
-        elif 'input' in kwargs and hasattr(kwargs['input'], 'access_token'):
-            token = kwargs['input'].access_token
-        elif 'access_token' in kwargs:
+        # Check all keyword arguments for access_token attribute
+        elif kwargs:
+            for key, value in kwargs.items():
+                if hasattr(value, 'access_token'):
+                    token = value.access_token
+                    break
+        # Check if access_token is directly in kwargs
+        if not token and 'access_token' in kwargs:
             token = kwargs['access_token']
 
         if not token:
