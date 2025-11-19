@@ -185,6 +185,85 @@ This project enhances the Skyy AI platform by developing a facial recognition ca
 - InsightFace downloads ~200MB of models on first initialization to `~/.insightface/models/buffalo_l/`
 - This is normal and only happens once
 
+## OAuth 2.1 Authentication
+
+The MCP server implements OAuth 2.1 Client Credentials flow with JWT tokens for secure authentication. All MCP tools require a valid access token.
+
+### Setting Up OAuth
+
+**1. Create an OAuth client:**
+
+```bash
+# Activate virtual environment
+facial_mcp_py311\Scripts\activate  # Windows
+
+# Create a new client
+python src/oauth_admin.py create-client --name "My Application"
+```
+
+This will output:
+```
+Client ID:     client_xxxxxxxxxxxxx
+Client Secret: yyyyyyyyyyyyyyyyyyyy
+
+⚠️  IMPORTANT: Save these credentials securely!
+   The client secret cannot be retrieved later.
+```
+
+**2. Generate an access token:**
+
+```bash
+python src/oauth_admin.py get-token \
+  --client-id CLIENT_ID \
+  --client-secret CLIENT_SECRET
+```
+
+The token is valid for 60 minutes.
+
+**3. Use the token in MCP requests:**
+
+Include the `access_token` field in all MCP tool requests:
+
+```json
+{
+  "access_token": "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "name": "John Doe",
+  "image_data": "base64_encoded_image..."
+}
+```
+
+### OAuth Management Commands
+
+**List all clients:**
+```bash
+python src/oauth_admin.py list-clients
+```
+
+**Delete a client:**
+```bash
+python src/oauth_admin.py delete-client --client-id CLIENT_ID
+```
+
+**Verify a token:**
+```bash
+python src/oauth_admin.py verify-token --token "eyJ..."
+```
+
+**Save token to file:**
+```bash
+python src/oauth_admin.py get-token \
+  --client-id CLIENT_ID \
+  --client-secret CLIENT_SECRET \
+  --output token.json
+```
+
+### Security Features
+
+- **RS256 JWT Tokens**: Cryptographically signed with RSA 2048-bit keys
+- **Token Expiration**: Tokens expire after 60 minutes
+- **Secure Storage**: Private keys and client secrets stored in `oauth_data/` (excluded from git)
+- **Client Credentials Flow**: Server-to-server authentication without user interaction
+
 ### Running the MCP Server
 
 The MCP server provides tools for facial recognition that can be integrated with MCP-compatible clients.

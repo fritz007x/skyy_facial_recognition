@@ -29,6 +29,9 @@ from PIL import Image
 import insightface
 from insightface.app import FaceAnalysis
 
+# OAuth 2.1 Authentication
+from oauth_middleware import require_auth, AuthenticationError, create_auth_error_response
+
 # Initialize FastMCP server
 mcp = FastMCP("skyy_facial_recognition_mcp")
 
@@ -86,6 +89,11 @@ class RegisterUserInput(BaseModel):
         extra='forbid'
     )
 
+    access_token: str = Field(
+        ...,
+        description="OAuth 2.1 access token for authentication",
+        min_length=20
+    )
     name: str = Field(
         ...,
         description="User's full name (e.g., 'John Smith', 'Jane Doe')",
@@ -122,6 +130,11 @@ class RecognizeFaceInput(BaseModel):
         extra='forbid'
     )
 
+    access_token: str = Field(
+        ...,
+        description="OAuth 2.1 access token for authentication",
+        min_length=20
+    )
     image_data: str = Field(
         ...,
         description="Base64-encoded image data to analyze (JPEG or PNG format)",
@@ -147,6 +160,11 @@ class GetUserProfileInput(BaseModel):
         extra='forbid'
     )
 
+    access_token: str = Field(
+        ...,
+        description="OAuth 2.1 access token for authentication",
+        min_length=20
+    )
     user_id: str = Field(
         ...,
         description="Unique identifier for the user (e.g., 'user_abc123')",
@@ -167,6 +185,11 @@ class ListUsersInput(BaseModel):
         extra='forbid'
     )
 
+    access_token: str = Field(
+        ...,
+        description="OAuth 2.1 access token for authentication",
+        min_length=20
+    )
     limit: Optional[int] = Field(
         default=20,
         description="Maximum number of users to return",
@@ -192,6 +215,11 @@ class UpdateUserInput(BaseModel):
         extra='forbid'
     )
 
+    access_token: str = Field(
+        ...,
+        description="OAuth 2.1 access token for authentication",
+        min_length=20
+    )
     user_id: str = Field(
         ...,
         description="Unique identifier for the user to update",
@@ -222,11 +250,35 @@ class DeleteUserInput(BaseModel):
         extra='forbid'
     )
 
+    access_token: str = Field(
+        ...,
+        description="OAuth 2.1 access token for authentication",
+        min_length=20
+    )
     user_id: str = Field(
         ...,
         description="Unique identifier for the user to delete",
         min_length=1,
         max_length=100
+    )
+    response_format: ResponseFormat = Field(
+        default=ResponseFormat.MARKDOWN,
+        description="Output format: 'markdown' for human-readable or 'json' for machine-readable"
+    )
+
+
+class GetDatabaseStatsInput(BaseModel):
+    """Input model for getting database statistics."""
+    model_config = ConfigDict(
+        str_strip_whitespace=True,
+        validate_assignment=True,
+        extra='forbid'
+    )
+
+    access_token: str = Field(
+        ...,
+        description="OAuth 2.1 access token for authentication",
+        min_length=20
     )
     response_format: ResponseFormat = Field(
         default=ResponseFormat.MARKDOWN,
@@ -535,6 +587,7 @@ def format_user_list_markdown(users: List[Dict[str, Any]], total: int, offset: i
         "openWorldHint": False
     }
 )
+@require_auth
 async def register_user(params: RegisterUserInput) -> str:
     """Register a new user in the Skyy facial recognition system using InsightFace.
     
@@ -665,6 +718,7 @@ async def register_user(params: RegisterUserInput) -> str:
         "openWorldHint": False
     }
 )
+@require_auth
 async def recognize_face(params: RecognizeFaceInput) -> str:
     """Recognize a registered user from a facial image using InsightFace.
     
@@ -807,6 +861,7 @@ async def recognize_face(params: RecognizeFaceInput) -> str:
         "openWorldHint": False
     }
 )
+@require_auth
 async def get_user_profile(params: GetUserProfileInput) -> str:
     """Retrieve detailed profile information for a registered user.
     
@@ -888,6 +943,7 @@ async def get_user_profile(params: GetUserProfileInput) -> str:
         "openWorldHint": False
     }
 )
+@require_auth
 async def list_users(params: ListUsersInput) -> str:
     """List all users registered in the facial recognition system.
     
@@ -975,6 +1031,7 @@ async def list_users(params: ListUsersInput) -> str:
         "openWorldHint": False
     }
 )
+@require_auth
 async def update_user(params: UpdateUserInput) -> str:
     """Update information for an existing registered user.
     
@@ -1072,6 +1129,7 @@ async def update_user(params: UpdateUserInput) -> str:
         "openWorldHint": False
     }
 )
+@require_auth
 async def delete_user(params: DeleteUserInput) -> str:
     """Delete a user from the facial recognition system.
     
@@ -1162,15 +1220,16 @@ async def delete_user(params: DeleteUserInput) -> str:
         "openWorldHint": False
     }
 )
-async def get_database_stats(response_format: ResponseFormat = ResponseFormat.MARKDOWN) -> str:
+@require_auth
+async def get_database_stats(params: GetDatabaseStatsInput) -> str:
     """Get statistics about the facial recognition database.
     
     This tool provides overview statistics about the system including total users,
     recognition counts, and database metadata.
     
     Args:
-        response_format (ResponseFormat): Output format (markdown or json)
-    
+        params (GetDatabaseStatsInput): Input parameters including access_token and response_format
+
     Returns:
         str: Database statistics and system information.
              JSON format includes: total_users, total_recognitions, most_active_user, etc.
@@ -1214,7 +1273,7 @@ async def get_database_stats(response_format: ResponseFormat = ResponseFormat.MA
             }
         
         # Format response
-        if response_format == ResponseFormat.JSON:
+        if params.response_format == ResponseFormat.JSON:
             return json.dumps(stats, indent=2)
         else:
             output = "# 📊 Database Statistics\n\n"
@@ -1235,8 +1294,8 @@ async def get_database_stats(response_format: ResponseFormat = ResponseFormat.MA
             "status": "error",
             "message": f"Failed to get statistics: {str(e)}"
         }
-        
-        if response_format == ResponseFormat.JSON:
+
+        if params.response_format == ResponseFormat.JSON:
             return json.dumps(error, indent=2)
         else:
             return f"# ❌ Error\n\n{str(e)}"

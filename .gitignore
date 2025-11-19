@@ -116,3 +116,6 @@ captured_image.txt
 !insightface-0.7.3-cp311-cp311-win_amd64.whl
 python-*.exe
 
+# OAuth 2.1 sensitive data
+oauth_data/
+
