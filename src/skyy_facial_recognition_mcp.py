@@ -79,10 +79,16 @@ def initialize_chroma():
                 allow_reset=True
             )
         )
-        # Get or create collection with cosine similarity
+        # Get or create collection with HNSW optimization for 512-d face embeddings
         chroma_collection = chroma_client.get_or_create_collection(
             name="face_embeddings",
-            metadata={"hnsw:space": "cosine"}  # Cosine similarity for face embeddings
+            metadata={
+                "hnsw:space": "cosine",           # Cosine similarity for face embeddings
+                "hnsw:construction_ef": 200,      # Build quality (default: 100) - better index quality
+                "hnsw:search_ef": 50,             # Search quality (default: 10) - more accurate queries
+                "hnsw:M": 32,                     # Connections per element (default: 16) - better recall
+                "hnsw:num_threads": 4             # Parallel threads for batch operations
+            }
         )
     return chroma_collection
 
