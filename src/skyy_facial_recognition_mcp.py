@@ -323,7 +323,7 @@ def migrate_json_to_chroma(db: Dict[str, Any]) -> None:
     Migrate existing JSON database to ChromaDB.
 
     This function checks if embeddings exist in the JSON database but not in ChromaDB,
-    and migrates them. It marks the database as migrated once complete.
+    and migrates them with ALL metadata fields. It marks the database as migrated once complete.
 
     Args:
         db: The JSON database dictionary
@@ -352,15 +352,38 @@ def migrate_json_to_chroma(db: Dict[str, Any]) -> None:
             try:
                 existing = collection.get(ids=[user_id])
                 if not existing["ids"]:  # User not in ChromaDB
+                    # Build comprehensive metadata for ChromaDB
+                    chroma_metadata = {
+                        "user_id": user_id,
+                        "name": user_data.get("name", ""),
+                        "image_path": user_data.get("image_path", ""),
+                        "registration_timestamp": user_data.get("registration_timestamp", ""),
+                        "recognition_count": user_data.get("recognition_count", 0),
+                        "last_recognized": user_data.get("last_recognized", ""),
+                        # Face detection metadata
+                        "bbox": json.dumps(facial_features.get("bbox", [])),
+                        "detection_score": facial_features.get("detection_score", 0.0),
+                        "extraction_timestamp": facial_features.get("extraction_timestamp", ""),
+                        "landmark_quality": facial_features.get("landmark_quality", 0.0),
+                        "face_size_ratio": facial_features.get("face_size_ratio", 0.0),
+                        "num_faces_detected": facial_features.get("num_faces_detected", 1),
+                    }
+
+                    # Add custom user metadata fields with prefix to avoid conflicts
+                    custom_metadata = user_data.get("metadata", {})
+                    for key, value in custom_metadata.items():
+                        # ChromaDB metadata values must be strings, ints, or floats
+                        if isinstance(value, (str, int, float, bool)):
+                            chroma_metadata[f"custom_{key}"] = value
+                        else:
+                            # Serialize complex types as JSON strings
+                            chroma_metadata[f"custom_{key}"] = json.dumps(value)
+
                     # Add to ChromaDB
                     collection.add(
                         ids=[user_id],
                         embeddings=[facial_features["feature_vector"]],
-                        metadatas=[{
-                            "user_id": user_id,
-                            "name": user_data["name"],
-                            "registration_timestamp": user_data.get("registration_timestamp", "")
-                        }]
+                        metadatas=[chroma_metadata]
                     )
                     migrated_count += 1
             except Exception as e:
@@ -375,42 +398,61 @@ def migrate_json_to_chroma(db: Dict[str, Any]) -> None:
         print(f"Migrated {migrated_count} users from JSON to ChromaDB")
 
 
-def load_database() -> Dict[str, Any]:
+def load_system_config() -> Dict[str, Any]:
     """
-    Load the facial recognition database from both JSON and ChromaDB.
+    Load system configuration (NOT user data).
 
-    The JSON file stores metadata, image paths, and additional user information.
-    ChromaDB stores the facial embeddings for efficient similarity search.
+    User data is stored in ChromaDB. This function only loads system-level
+    configuration like version, migration status, etc.
 
     Returns:
-        Dict containing users and metadata
+        Dict containing system configuration
     """
     if INDEX_FILE.exists():
         with open(INDEX_FILE, 'r') as f:
-            db = json.load(f)
+            config = json.load(f)
+            # Ensure we have the metadata section
+            if "metadata" not in config:
+                config["metadata"] = {"version": "1.0", "created": datetime.utcnow().isoformat()}
+            # Check for old format with users (for migration)
+            if "users" in config and not config.get("metadata", {}).get("chroma_migrated", False):
+                # Old database format - trigger migration
+                migrate_json_to_chroma(config)
+                # After migration, remove users from JSON
+                del config["users"]
+                save_system_config(config)
     else:
-        db = {"users": {}, "metadata": {"version": "1.0", "created": datetime.utcnow().isoformat()}}
+        config = {"metadata": {"version": "1.0", "created": datetime.utcnow().isoformat(), "chroma_migrated": True}}
+        save_system_config(config)
 
     # Initialize ChromaDB
     initialize_chroma()
 
-    # Migrate existing data if needed
-    migrate_json_to_chroma(db)
+    return config
 
-    return db
+
+def save_system_config(config: Dict[str, Any]) -> None:
+    """
+    Save system configuration to disk (NOT user data).
+
+    User data is saved to ChromaDB separately.
+
+    Args:
+        config: System configuration dictionary to save
+    """
+    with open(INDEX_FILE, 'w') as f:
+        json.dump(config, f, indent=2)
+
+
+# Backward compatibility aliases
+def load_database() -> Dict[str, Any]:
+    """Load system config (backward compatibility alias)."""
+    return load_system_config()
 
 
 def save_database(db: Dict[str, Any]) -> None:
-    """
-    Save the facial recognition database to disk.
-
-    Saves metadata to JSON file. Embeddings are saved to ChromaDB separately.
-
-    Args:
-        db: Database dictionary to save
-    """
-    with open(INDEX_FILE, 'w') as f:
-        json.dump(db, f, indent=2)
+    """Save system config (backward compatibility alias)."""
+    save_system_config(db)
 
 
 def generate_user_id(name: str) -> str:
@@ -419,6 +461,62 @@ def generate_user_id(name: str) -> str:
     unique_string = f"{name}_{timestamp}"
     hash_object = hashlib.sha256(unique_string.encode())
     return f"user_{hash_object.hexdigest()[:12]}"
+
+
+def extract_user_data_from_chroma_metadata(chroma_metadata: Dict[str, Any]) -> Dict[str, Any]:
+    """
+    Extract user data from ChromaDB metadata format.
+
+    Converts ChromaDB metadata format back into user data structure,
+    separating custom metadata from system fields.
+
+    Args:
+        chroma_metadata: Metadata dictionary from ChromaDB
+
+    Returns:
+        Dict containing user data with separated custom metadata
+    """
+    # Parse bbox from JSON if present
+    bbox = chroma_metadata.get("bbox", "[]")
+    if isinstance(bbox, str):
+        try:
+            bbox = json.loads(bbox)
+        except:
+            bbox = []
+
+    # Build user data structure
+    user_data = {
+        "user_id": chroma_metadata.get("user_id", ""),
+        "name": chroma_metadata.get("name", ""),
+        "image_path": chroma_metadata.get("image_path", ""),
+        "registration_timestamp": chroma_metadata.get("registration_timestamp", ""),
+        "recognition_count": chroma_metadata.get("recognition_count", 0),
+        "last_recognized": chroma_metadata.get("last_recognized", None) or None,
+        "facial_features": {
+            "bbox": bbox,
+            "detection_score": chroma_metadata.get("detection_score", 0.0),
+            "extraction_timestamp": chroma_metadata.get("extraction_timestamp", ""),
+            "landmark_quality": chroma_metadata.get("landmark_quality", 0.0),
+            "face_size_ratio": chroma_metadata.get("face_size_ratio", 0.0),
+            "num_faces_detected": chroma_metadata.get("num_faces_detected", 1),
+        },
+        "metadata": {}
+    }
+
+    # Extract custom metadata (fields with "custom_" prefix)
+    for key, value in chroma_metadata.items():
+        if key.startswith("custom_"):
+            actual_key = key[7:]  # Remove "custom_" prefix
+            # Try to parse JSON strings back to original types
+            if isinstance(value, str):
+                try:
+                    user_data["metadata"][actual_key] = json.loads(value)
+                except:
+                    user_data["metadata"][actual_key] = value
+            else:
+                user_data["metadata"][actual_key] = value
+
+    return user_data
 
 
 def save_image(user_id: str, image_data: str) -> str:
@@ -733,8 +831,8 @@ async def register_user(params: RegisterUserInput) -> str:
         - Good lighting improves recognition accuracy
     """
     try:
-        # Load database
-        db = load_database()
+        # Load system config (no user data)
+        load_system_config()
 
         # Generate unique user ID
         user_id = generate_user_id(params.name)
@@ -745,42 +843,43 @@ async def register_user(params: RegisterUserInput) -> str:
         # Save image to disk
         image_path = save_image(user_id, params.image_data)
 
-        # Create user record (excluding embedding for JSON storage)
-        # Embeddings are stored in ChromaDB, not JSON
-        user_record = {
+        # Current timestamp
+        registration_timestamp = datetime.utcnow().isoformat()
+
+        # Build comprehensive metadata for ChromaDB
+        chroma_metadata = {
             "user_id": user_id,
             "name": params.name,
             "image_path": image_path,
-            "facial_features": {
-                # Store metadata about the face, but not the full embedding
-                "bbox": facial_features["bbox"],
-                "detection_score": facial_features["detection_score"],
-                "extraction_timestamp": facial_features["extraction_timestamp"],
-                "landmark_quality": facial_features["landmark_quality"],
-                "face_size_ratio": facial_features["face_size_ratio"],
-                "num_faces_detected": facial_features["num_faces_detected"]
-            },
-            "metadata": params.metadata,
-            "registration_timestamp": datetime.utcnow().isoformat(),
+            "registration_timestamp": registration_timestamp,
             "recognition_count": 0,
-            "last_recognized": None
+            "last_recognized": "",
+            # Face detection metadata
+            "bbox": json.dumps(facial_features["bbox"]),
+            "detection_score": facial_features["detection_score"],
+            "extraction_timestamp": facial_features["extraction_timestamp"],
+            "landmark_quality": facial_features["landmark_quality"],
+            "face_size_ratio": facial_features["face_size_ratio"],
+            "num_faces_detected": facial_features["num_faces_detected"],
         }
 
-        # Add embedding to ChromaDB
+        # Add custom user metadata fields with prefix to avoid conflicts
+        custom_metadata = params.metadata or {}
+        for key, value in custom_metadata.items():
+            # ChromaDB metadata values must be strings, ints, or floats
+            if isinstance(value, (str, int, float, bool)):
+                chroma_metadata[f"custom_{key}"] = value
+            else:
+                # Serialize complex types as JSON strings
+                chroma_metadata[f"custom_{key}"] = json.dumps(value)
+
+        # Add embedding AND all metadata to ChromaDB
         collection = initialize_chroma()
         collection.add(
             ids=[user_id],
             embeddings=[facial_features["feature_vector"]],
-            metadatas=[{
-                "user_id": user_id,
-                "name": params.name,
-                "registration_timestamp": user_record["registration_timestamp"]
-            }]
+            metadatas=[chroma_metadata]
         )
-
-        # Add to JSON database
-        db["users"][user_id] = user_record
-        save_database(db)
         
         # Format response
         if params.response_format == ResponseFormat.JSON:
@@ -790,7 +889,7 @@ async def register_user(params: RegisterUserInput) -> str:
                 "user": {
                     "user_id": user_id,
                     "name": params.name,
-                    "registration_timestamp": user_record["registration_timestamp"],
+                    "registration_timestamp": registration_timestamp,
                     "face_quality": {
                         "detection_score": facial_features.get("detection_score"),
                         "landmark_quality": facial_features.get("landmark_quality"),
@@ -801,28 +900,28 @@ async def register_user(params: RegisterUserInput) -> str:
             }
             return json.dumps(response, indent=2)
         else:
-            output = f"# ✅ Registration Successful\n\n"
+            output = f"# Registration Successful\n\n"
             output += f"**User ID:** {user_id}\n"
             output += f"**Name:** {params.name}\n"
-            output += f"**Registered:** {user_record['registration_timestamp']}\n\n"
-            
+            output += f"**Registered:** {registration_timestamp}\n\n"
+
             output += "## Face Detection Quality\n"
             output += f"- **Detection Confidence:** {facial_features.get('detection_score', 0):.2%}\n"
             output += f"- **Overall Quality:** {facial_features.get('landmark_quality', 0):.2%}\n"
             output += f"- **Face Size:** {facial_features.get('face_size_ratio', 0):.2%} of image\n\n"
-            
+
             if facial_features.get('num_faces_detected', 1) > 1:
-                output += f"⚠️ **Note:** {facial_features['num_faces_detected']} faces detected. Using the largest face.\n\n"
-            
+                output += f"Note: {facial_features['num_faces_detected']} faces detected. Using the largest face.\n\n"
+
             if params.metadata:
                 output += "## Metadata\n"
                 for key, value in params.metadata.items():
                     output += f"- **{key}:** {value}\n"
                 output += "\n"
-            
+
             output += f"The user has been registered and can now be recognized.\n"
             output += f"Facial data is stored locally at: {DATABASE_PATH}\n"
-            
+
             return output
     
     except Exception as e:
@@ -835,7 +934,7 @@ async def register_user(params: RegisterUserInput) -> str:
         if params.response_format == ResponseFormat.JSON:
             return json.dumps(error_response, indent=2)
         else:
-            return f"# ❌ Registration Failed\n\n**Error:** {str(e)}\n\nPlease ensure the image contains a clear, front-facing face."
+            return f"# Registration Failed\n\n**Error:** {str(e)}\n\nPlease ensure the image contains a clear, front-facing face."
 
 
 @mcp.tool(
@@ -893,24 +992,8 @@ async def recognize_face(params: RecognizeFaceInput) -> str:
         - Image quality and lighting affect recognition accuracy
     """
     try:
-        # Load database
-        db = load_database()
-        users = db.get("users", {})
-
-        if not users:
-            result = {
-                "status": RecognitionStatus.NOT_RECOGNIZED.value,
-                "message": "No users registered in the database",
-                "distance": 1.0
-            }
-
-            if params.response_format == ResponseFormat.JSON:
-                return json.dumps(result, indent=2)
-            else:
-                return "# ℹ️ No Users Registered\n\nThere are no users in the database yet. Use `skyy_register_user` to register users."
-
-        # Extract features from input image
-        input_features = extract_facial_features(params.image_data)
+        # Load system config
+        load_system_config()
 
         # Query ChromaDB for nearest neighbor
         collection = initialize_chroma()
@@ -927,13 +1010,17 @@ async def recognize_face(params: RecognizeFaceInput) -> str:
             if params.response_format == ResponseFormat.JSON:
                 return json.dumps(result, indent=2)
             else:
-                return "# ℹ️ No Users Registered\n\nThere are no users in the database yet. Use `skyy_register_user` to register users."
+                return "# No Users Registered\n\nThere are no users in the database yet. Use `skyy_register_user` to register users."
+
+        # Extract features from input image
+        input_features = extract_facial_features(params.image_data)
 
         # Query ChromaDB with the input embedding
         # ChromaDB returns cosine distance (0 = identical, 2 = opposite)
         results = collection.query(
             query_embeddings=[input_features["feature_vector"]],
-            n_results=1  # Get the closest match
+            n_results=1,  # Get the closest match
+            include=["metadatas", "distances"]
         )
 
         # Extract results
@@ -952,32 +1039,31 @@ async def recognize_face(params: RecognizeFaceInput) -> str:
         # Get the best match
         best_user_id = results["ids"][0][0]
         best_distance = results["distances"][0][0]  # ChromaDB cosine distance
+        best_metadata = results["metadatas"][0][0] if results["metadatas"] and results["metadatas"][0] else {}
 
-        # Get full user data from JSON database
-        best_match = users.get(best_user_id)
-
-        if not best_match:
-            # This shouldn't happen, but handle gracefully
-            result = {
-                "status": RecognitionStatus.ERROR.value,
-                "message": "Database inconsistency detected",
-                "distance": best_distance
-            }
-
-            if params.response_format == ResponseFormat.JSON:
-                return json.dumps(result, indent=2)
-            else:
-                return format_recognition_result_markdown(result)
+        # Extract user data from ChromaDB metadata
+        best_match = extract_user_data_from_chroma_metadata(best_metadata)
 
         # Determine recognition status based on distance
         # Lower distance = better match
         if best_distance <= params.confidence_threshold:
-            # Update recognition stats
-            best_match["recognition_count"] = best_match.get("recognition_count", 0) + 1
-            best_match["last_recognized"] = datetime.utcnow().isoformat()
-            db["users"][best_match["user_id"]] = best_match
-            save_database(db)
-            
+            # Update recognition stats in ChromaDB
+            new_count = best_match.get("recognition_count", 0) + 1
+            last_recognized = datetime.utcnow().isoformat()
+
+            # Update metadata in ChromaDB
+            updated_metadata = best_metadata.copy()
+            updated_metadata["recognition_count"] = new_count
+            updated_metadata["last_recognized"] = last_recognized
+
+            try:
+                collection.update(
+                    ids=[best_user_id],
+                    metadatas=[updated_metadata]
+                )
+            except Exception as e:
+                print(f"Warning: Failed to update recognition stats: {e}")
+
             result = {
                 "status": RecognitionStatus.RECOGNIZED.value,
                 "distance": best_distance,
@@ -986,7 +1072,7 @@ async def recognize_face(params: RecognizeFaceInput) -> str:
                     "user_id": best_match["user_id"],
                     "name": best_match["name"],
                     "metadata": best_match.get("metadata", {}),
-                    "recognition_count": best_match["recognition_count"]
+                    "recognition_count": new_count
                 }
             }
         elif best_distance < 0.50:  # Close but not quite
@@ -1006,7 +1092,7 @@ async def recognize_face(params: RecognizeFaceInput) -> str:
                 "distance": best_distance,
                 "message": "No matching user found in database"
             }
-        
+
         # Format response
         if params.response_format == ResponseFormat.JSON:
             return json.dumps(result, indent=2)
@@ -1023,7 +1109,7 @@ async def recognize_face(params: RecognizeFaceInput) -> str:
         if params.response_format == ResponseFormat.JSON:
             return json.dumps(error_result, indent=2)
         else:
-            return f"# ❌ Recognition Error\n\n**Error:** {str(e)}\n\nPlease ensure the image contains a clear face and try again."
+            return f"# Recognition Error\n\n**Error:** {str(e)}\n\nPlease ensure the image contains a clear face and try again."
 
 
 @mcp.tool(
@@ -1064,48 +1150,70 @@ async def get_user_profile(params: GetUserProfileInput) -> str:
         with `skyy_list_users` tool.
     """
     try:
-        db = load_database()
-        users = db.get("users", {})
-        
-        if params.user_id not in users:
+        # Load system config
+        load_system_config()
+
+        # Get user from ChromaDB
+        collection = initialize_chroma()
+
+        try:
+            result = collection.get(
+                ids=[params.user_id],
+                include=["metadatas"]
+            )
+
+            if not result["ids"] or not result["ids"]:
+                error = {
+                    "status": "error",
+                    "message": f"User ID '{params.user_id}' not found",
+                    "suggestion": "Use skyy_list_users to see all registered users"
+                }
+
+                if params.response_format == ResponseFormat.JSON:
+                    return json.dumps(error, indent=2)
+                else:
+                    return f"# User Not Found\n\n**User ID:** {params.user_id}\n\nThis user is not registered. Use `skyy_list_users` to see all registered users."
+
+            # Extract user data from ChromaDB metadata
+            chroma_metadata = result["metadatas"][0] if result["metadatas"] else {}
+            user_data = extract_user_data_from_chroma_metadata(chroma_metadata)
+
+            # Format response
+            if params.response_format == ResponseFormat.JSON:
+                # Return sanitized user data (without internal paths)
+                response = {
+                    "user_id": user_data["user_id"],
+                    "name": user_data["name"],
+                    "metadata": user_data.get("metadata", {}),
+                    "registration_timestamp": user_data["registration_timestamp"],
+                    "recognition_count": user_data.get("recognition_count", 0),
+                    "last_recognized": user_data.get("last_recognized")
+                }
+                return json.dumps(response, indent=2)
+            else:
+                return format_user_profile_markdown(user_data)
+        except Exception as e:
             error = {
                 "status": "error",
                 "message": f"User ID '{params.user_id}' not found",
                 "suggestion": "Use skyy_list_users to see all registered users"
             }
-            
+
             if params.response_format == ResponseFormat.JSON:
                 return json.dumps(error, indent=2)
             else:
-                return f"# ❌ User Not Found\n\n**User ID:** {params.user_id}\n\nThis user is not registered. Use `skyy_list_users` to see all registered users."
-        
-        user_data = users[params.user_id]
-        
-        # Format response
-        if params.response_format == ResponseFormat.JSON:
-            # Return sanitized user data (without internal paths)
-            response = {
-                "user_id": user_data["user_id"],
-                "name": user_data["name"],
-                "metadata": user_data.get("metadata", {}),
-                "registration_timestamp": user_data["registration_timestamp"],
-                "recognition_count": user_data.get("recognition_count", 0),
-                "last_recognized": user_data.get("last_recognized")
-            }
-            return json.dumps(response, indent=2)
-        else:
-            return format_user_profile_markdown(user_data)
+                return f"# User Not Found\n\n**User ID:** {params.user_id}\n\nThis user is not registered. Use `skyy_list_users` to see all registered users."
     
     except Exception as e:
         error = {
             "status": "error",
             "message": f"Failed to retrieve profile: {str(e)}"
         }
-        
+
         if params.response_format == ResponseFormat.JSON:
             return json.dumps(error, indent=2)
         else:
-            return f"# ❌ Error\n\n{str(e)}"
+            return f"# Error\n\n{str(e)}"
 
 
 @mcp.tool(
@@ -1148,17 +1256,47 @@ async def list_users(params: ListUsersInput) -> str:
         The response includes has_more and next_offset for easy pagination.
     """
     try:
-        db = load_database()
-        users_dict = db.get("users", {})
-        
-        # Convert to list and sort by registration date (newest first)
-        users_list = list(users_dict.values())
-        users_list.sort(key=lambda x: x["registration_timestamp"], reverse=True)
-        
+        # Load system config
+        load_system_config()
+
+        # Get all users from ChromaDB
+        collection = initialize_chroma()
+
+        # Get all users
+        result = collection.get(
+            include=["metadatas"]
+        )
+
+        if not result["ids"]:
+            # No users in database
+            if params.response_format == ResponseFormat.JSON:
+                response = {
+                    "total": 0,
+                    "count": 0,
+                    "offset": 0,
+                    "limit": params.limit,
+                    "has_more": False,
+                    "next_offset": None,
+                    "users": []
+                }
+                return json.dumps(response, indent=2)
+            else:
+                return "# Registered Users (0 total)\n\nNo users found.\n"
+
+        # Extract user data from ChromaDB metadata
+        users_list = []
+        for i, user_id in enumerate(result["ids"]):
+            chroma_metadata = result["metadatas"][i] if result["metadatas"] and i < len(result["metadatas"]) else {}
+            user_data = extract_user_data_from_chroma_metadata(chroma_metadata)
+            users_list.append(user_data)
+
+        # Sort by registration date (newest first)
+        users_list.sort(key=lambda x: x.get("registration_timestamp", ""), reverse=True)
+
         # Pagination
         total = len(users_list)
         paginated_users = users_list[params.offset:params.offset + params.limit]
-        
+
         # Format response
         if params.response_format == ResponseFormat.JSON:
             has_more = total > params.offset + len(paginated_users)
@@ -1189,11 +1327,11 @@ async def list_users(params: ListUsersInput) -> str:
             "status": "error",
             "message": f"Failed to list users: {str(e)}"
         }
-        
+
         if params.response_format == ResponseFormat.JSON:
             return json.dumps(error, indent=2)
         else:
-            return f"# ❌ Error\n\n{str(e)}"
+            return f"# Error\n\n{str(e)}"
 
 
 @mcp.tool(
@@ -1238,60 +1376,102 @@ async def update_user(params: UpdateUserInput) -> str:
         Returns error if user_id not found or if update fails.
     """
     try:
-        db = load_database()
-        users = db.get("users", {})
-        
-        if params.user_id not in users:
+        # Load system config
+        load_system_config()
+
+        # Get user from ChromaDB
+        collection = initialize_chroma()
+
+        # Check if user exists
+        try:
+            result = collection.get(
+                ids=[params.user_id],
+                include=["metadatas"]
+            )
+
+            if not result["ids"] or not result["ids"]:
+                error = {
+                    "status": "error",
+                    "message": f"User ID '{params.user_id}' not found",
+                    "suggestion": "Use skyy_list_users to see all registered users"
+                }
+
+                if params.response_format == ResponseFormat.JSON:
+                    return json.dumps(error, indent=2)
+                else:
+                    return f"# User Not Found\n\n**User ID:** {params.user_id}\n\nThis user is not registered."
+
+            # Get existing metadata
+            existing_metadata = result["metadatas"][0] if result["metadatas"] else {}
+
+            # Update fields
+            updated_metadata = existing_metadata.copy()
+
+            if params.name is not None:
+                updated_metadata["name"] = params.name
+
+            if params.metadata is not None:
+                # Remove old custom metadata
+                keys_to_remove = [k for k in updated_metadata.keys() if k.startswith("custom_")]
+                for key in keys_to_remove:
+                    del updated_metadata[key]
+
+                # Add new custom metadata
+                for key, value in params.metadata.items():
+                    # ChromaDB metadata values must be strings, ints, or floats
+                    if isinstance(value, (str, int, float, bool)):
+                        updated_metadata[f"custom_{key}"] = value
+                    else:
+                        # Serialize complex types as JSON strings
+                        updated_metadata[f"custom_{key}"] = json.dumps(value)
+
+            # Save changes to ChromaDB
+            collection.update(
+                ids=[params.user_id],
+                metadatas=[updated_metadata]
+            )
+
+            # Extract updated user data for response
+            user_data = extract_user_data_from_chroma_metadata(updated_metadata)
+
+            # Format response
+            if params.response_format == ResponseFormat.JSON:
+                response = {
+                    "status": "success",
+                    "message": "User updated successfully",
+                    "user": {
+                        "user_id": user_data["user_id"],
+                        "name": user_data["name"],
+                        "metadata": user_data.get("metadata", {})
+                    }
+                }
+                return json.dumps(response, indent=2)
+            else:
+                output = f"# User Updated\n\n"
+                output += format_user_profile_markdown(user_data)
+                return output
+        except Exception as e:
             error = {
                 "status": "error",
                 "message": f"User ID '{params.user_id}' not found",
                 "suggestion": "Use skyy_list_users to see all registered users"
             }
-            
+
             if params.response_format == ResponseFormat.JSON:
                 return json.dumps(error, indent=2)
             else:
-                return f"# ❌ User Not Found\n\n**User ID:** {params.user_id}\n\nThis user is not registered."
-        
-        user_data = users[params.user_id]
-        
-        # Update fields
-        if params.name is not None:
-            user_data["name"] = params.name
-        if params.metadata is not None:
-            user_data["metadata"] = params.metadata
-        
-        # Save changes
-        db["users"][params.user_id] = user_data
-        save_database(db)
-        
-        # Format response
-        if params.response_format == ResponseFormat.JSON:
-            response = {
-                "status": "success",
-                "message": "User updated successfully",
-                "user": {
-                    "user_id": user_data["user_id"],
-                    "name": user_data["name"],
-                    "metadata": user_data.get("metadata", {})
-                }
-            }
-            return json.dumps(response, indent=2)
-        else:
-            output = f"# ✅ User Updated\n\n"
-            output += format_user_profile_markdown(user_data)
-            return output
+                return f"# User Not Found\n\n**User ID:** {params.user_id}\n\nThis user is not registered."
     
     except Exception as e:
         error = {
             "status": "error",
             "message": f"Failed to update user: {str(e)}"
         }
-        
+
         if params.response_format == ResponseFormat.JSON:
             return json.dumps(error, indent=2)
         else:
-            return f"# ❌ Error\n\n{str(e)}"
+            return f"# Error\n\n{str(e)}"
 
 
 @mcp.tool(
@@ -1334,62 +1514,81 @@ async def delete_user(params: DeleteUserInput) -> str:
         Returns error if user_id not found or deletion fails.
     """
     try:
-        db = load_database()
-        users = db.get("users", {})
-        
-        if params.user_id not in users:
+        # Load system config
+        load_system_config()
+
+        # Get user from ChromaDB
+        collection = initialize_chroma()
+
+        try:
+            result = collection.get(
+                ids=[params.user_id],
+                include=["metadatas"]
+            )
+
+            if not result["ids"] or not result["ids"]:
+                error = {
+                    "status": "error",
+                    "message": f"User ID '{params.user_id}' not found",
+                    "suggestion": "Use skyy_list_users to see all registered users"
+                }
+
+                if params.response_format == ResponseFormat.JSON:
+                    return json.dumps(error, indent=2)
+                else:
+                    return f"# User Not Found\n\n**User ID:** {params.user_id}\n\nThis user is not registered."
+
+            # Extract user data
+            chroma_metadata = result["metadatas"][0] if result["metadatas"] else {}
+            user_data = extract_user_data_from_chroma_metadata(chroma_metadata)
+            user_name = user_data["name"]
+            image_path = user_data.get("image_path", "")
+
+            # Delete image file if exists
+            if image_path:
+                image_path_obj = Path(image_path)
+                if image_path_obj.exists():
+                    image_path_obj.unlink()
+
+            # Remove from ChromaDB
+            try:
+                collection.delete(ids=[params.user_id])
+            except Exception as e:
+                print(f"Warning: Failed to delete user from ChromaDB: {e}")
+
+            # Format response
+            if params.response_format == ResponseFormat.JSON:
+                response = {
+                    "status": "success",
+                    "message": "User deleted successfully",
+                    "deleted_user_id": params.user_id,
+                    "deleted_user_name": user_name
+                }
+                return json.dumps(response, indent=2)
+            else:
+                return f"# User Deleted\n\n**User ID:** {params.user_id}\n**Name:** {user_name}\n\nThe user has been permanently removed from the system."
+        except Exception as e:
             error = {
                 "status": "error",
                 "message": f"User ID '{params.user_id}' not found",
                 "suggestion": "Use skyy_list_users to see all registered users"
             }
-            
+
             if params.response_format == ResponseFormat.JSON:
                 return json.dumps(error, indent=2)
             else:
-                return f"# ❌ User Not Found\n\n**User ID:** {params.user_id}\n\nThis user is not registered."
-        
-        user_data = users[params.user_id]
-        user_name = user_data["name"]
-
-        # Delete image file
-        image_path = Path(user_data["image_path"])
-        if image_path.exists():
-            image_path.unlink()
-
-        # Remove from ChromaDB
-        collection = initialize_chroma()
-        try:
-            collection.delete(ids=[params.user_id])
-        except Exception as e:
-            print(f"Warning: Failed to delete user from ChromaDB: {e}")
-
-        # Remove from JSON database
-        del users[params.user_id]
-        save_database(db)
-        
-        # Format response
-        if params.response_format == ResponseFormat.JSON:
-            response = {
-                "status": "success",
-                "message": "User deleted successfully",
-                "deleted_user_id": params.user_id,
-                "deleted_user_name": user_name
-            }
-            return json.dumps(response, indent=2)
-        else:
-            return f"# ✅ User Deleted\n\n**User ID:** {params.user_id}\n**Name:** {user_name}\n\nThe user has been permanently removed from the system."
+                return f"# User Not Found\n\n**User ID:** {params.user_id}\n\nThis user is not registered."
     
     except Exception as e:
         error = {
             "status": "error",
             "message": f"Failed to delete user: {str(e)}"
         }
-        
+
         if params.response_format == ResponseFormat.JSON:
             return json.dumps(error, indent=2)
         else:
-            return f"# ❌ Error\n\n{str(e)}"
+            return f"# Error\n\n{str(e)}"
 
 
 @mcp.tool(
