@@ -7,11 +7,15 @@ Provides token validation for MCP tool calls.
 from functools import wraps
 from typing import Optional, Callable, Any
 import json
+from contextvars import ContextVar
 
 try:
     from .oauth_config import oauth_config
 except ImportError:
     from oauth_config import oauth_config
+
+# Context variable to store client_id for current request
+_client_id_context: ContextVar[Optional[str]] = ContextVar('client_id', default=None)
 
 
 class AuthenticationError(Exception):
@@ -61,10 +65,11 @@ def require_auth(func: Callable) -> Callable:
                 "Invalid or expired access token. Please obtain a new token."
             )
 
-        # Store client_id for potential use by the tool
+        # Store client_id in context variable for audit logging
         # Note: We don't add it to kwargs because Pydantic models have extra='forbid'
-        # Tools can access it via get_client_id_from_context() if needed
+        # Tools can access it via get_current_client_id() if needed
         client_id = payload['sub']
+        _client_id_context.set(client_id)
 
         # Call the original function without modifying kwargs
         # (Pydantic models reject unexpected kwargs)
@@ -73,16 +78,17 @@ def require_auth(func: Callable) -> Callable:
     return wrapper
 
 
-def get_client_id_from_context(**kwargs) -> Optional[str]:
+def get_current_client_id() -> Optional[str]:
     """
-    Extract the authenticated client ID from the function context.
+    Get the authenticated client ID for the current request.
 
     This should be called from within an @require_auth decorated function.
+    Uses context variables to retrieve the client_id without modifying function signatures.
 
     Returns:
         Client ID if authentication was successful, None otherwise
     """
-    return kwargs.get('_client_id')
+    return _client_id_context.get()
 
 
 def create_auth_error_response(error_msg: str, response_format: str = "markdown") -> str:
