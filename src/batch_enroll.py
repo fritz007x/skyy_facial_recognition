@@ -96,10 +96,10 @@ class BatchEnrollmentClient:
                 f"  mkdir {self.enrollment_dir}"
             )
 
-        # Get all image files
-        image_files = []
+        # Get all image files (use set to avoid duplicates on case-insensitive filesystems)
+        image_files = set()
         for ext in ['*.jpg', '*.jpeg', '*.png', '*.JPG', '*.JPEG', '*.PNG']:
-            image_files.extend(list(self.enrollment_dir.glob(ext)))
+            image_files.update(self.enrollment_dir.glob(ext))
 
         if not image_files:
             raise FileNotFoundError(
@@ -107,7 +107,7 @@ class BatchEnrollmentClient:
                 f"Supported formats: .jpg, .jpeg, .png"
             )
 
-        return sorted(image_files)
+        return sorted(list(image_files))
 
     async def get_existing_users(self, session: ClientSession):
         """Get list of existing users from database."""
