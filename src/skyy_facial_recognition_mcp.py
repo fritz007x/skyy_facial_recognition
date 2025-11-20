@@ -32,10 +32,13 @@ import chromadb
 from chromadb.config import Settings
 
 # OAuth 2.1 Authentication
-from oauth_middleware import require_auth, AuthenticationError, create_auth_error_response
+from oauth_middleware import require_auth, AuthenticationError, create_auth_error_response, get_current_client_id
 
 # Health Monitoring
 from health_checker import health_checker, HealthStatus, ComponentType
+
+# Audit Logging
+from audit_logger import audit_logger, AuditOutcome, AuditEventType
 
 # Initialize FastMCP server
 mcp = FastMCP("skyy_facial_recognition_mcp")
@@ -133,6 +136,9 @@ async def perform_health_checks():
         print(f"[Health Check] WARNING: Operating in degraded mode")
         print(f"[Health Check] Queued registrations: {summary['degraded_mode']['queued_registrations']}")
 
+    # Audit log: Server startup
+    audit_logger.log_server_start(summary)
+
     return summary
 
 
@@ -150,6 +156,31 @@ def on_health_state_change(component: ComponentType, old_status: HealthStatus, n
     available_count = sum(1 for v in capabilities.values() if v)
 
     print(f"[Health Change] Available capabilities: {available_count}/{len(capabilities)}")
+
+    # Audit log: Health state change
+    audit_logger.log_health_event(
+        event_type=AuditEventType.HEALTH_STATE_CHANGE,
+        component=component.value,
+        status=new_status.value,
+        message=f"Health state changed from {old_status.value} to {new_status.value}",
+        details={"available_capabilities": available_count}
+    )
+
+    # Check for degraded mode transitions
+    if new_status == HealthStatus.DEGRADED and old_status == HealthStatus.HEALTHY:
+        audit_logger.log_health_event(
+            event_type=AuditEventType.DEGRADED_MODE_ENTER,
+            component=component.value,
+            status=new_status.value,
+            message=f"Entering degraded mode for {component.value}"
+        )
+    elif new_status == HealthStatus.HEALTHY and old_status == HealthStatus.DEGRADED:
+        audit_logger.log_health_event(
+            event_type=AuditEventType.DEGRADED_MODE_EXIT,
+            component=component.value,
+            status=new_status.value,
+            message=f"Exiting degraded mode for {component.value}"
+        )
 
     # Note: MCP notification sending would go here
     # FastMCP doesn't currently expose a notification API in the decorator-based interface
@@ -940,10 +971,22 @@ async def register_user(params: RegisterUserInput) -> str:
         - Good lighting improves recognition accuracy
     """
     try:
+        # Get client ID for audit logging
+        client_id = get_current_client_id()
+
         # Health Check: Verify InsightFace is available
         if not health_checker.is_healthy(ComponentType.INSIGHTFACE):
             health = health_checker.get_health(ComponentType.INSIGHTFACE)
             error_msg = f"Face recognition unavailable: {health.message}"
+
+            # Audit log: Registration failure (service unavailable)
+            audit_logger.log_registration(
+                client_id=client_id,
+                outcome=AuditOutcome.FAILURE,
+                user_name=params.name,
+                error_message=error_msg
+            )
+
             if params.response_format == ResponseFormat.JSON:
                 return json.dumps({"status": "error", "message": error_msg}, indent=2)
             return f"# Error: Face Recognition Unavailable\n\n{error_msg}\n\nPlease contact your system administrator."
@@ -1005,6 +1048,21 @@ async def register_user(params: RegisterUserInput) -> str:
                 f"Position in queue: {queue_size}"
             )
 
+            # Audit log: Registration queued (degraded mode)
+            audit_logger.log_registration(
+                client_id=client_id,
+                outcome=AuditOutcome.QUEUED,
+                user_name=params.name,
+                user_id=user_id,
+                biometric_data={
+                    "detection_score": facial_features.get("detection_score"),
+                    "landmark_quality": facial_features.get("landmark_quality"),
+                    "face_size_ratio": facial_features.get("face_size_ratio"),
+                    "num_faces_detected": facial_features.get("num_faces_detected")
+                },
+                additional_info={"queue_position": queue_size}
+            )
+
             if params.response_format == ResponseFormat.JSON:
                 return json.dumps({
                     "status": "queued",
@@ -1030,7 +1088,21 @@ async def register_user(params: RegisterUserInput) -> str:
             embeddings=[facial_features["feature_vector"]],
             metadatas=[chroma_metadata]
         )
-        
+
+        # Audit log: Successful registration
+        audit_logger.log_registration(
+            client_id=client_id,
+            outcome=AuditOutcome.SUCCESS,
+            user_name=params.name,
+            user_id=user_id,
+            biometric_data={
+                "detection_score": facial_features.get("detection_score"),
+                "landmark_quality": facial_features.get("landmark_quality"),
+                "face_size_ratio": facial_features.get("face_size_ratio"),
+                "num_faces_detected": facial_features.get("num_faces_detected")
+            }
+        )
+
         # Format response
         if params.response_format == ResponseFormat.JSON:
             response = {
@@ -1075,12 +1147,24 @@ async def register_user(params: RegisterUserInput) -> str:
             return output
     
     except Exception as e:
+        # Audit log: Registration failure
+        try:
+            client_id = get_current_client_id()
+            audit_logger.log_registration(
+                client_id=client_id,
+                outcome=AuditOutcome.FAILURE,
+                user_name=params.name,
+                error_message=str(e)
+            )
+        except:
+            pass  # Don't let audit logging failure prevent error reporting
+
         error_response = {
             "status": "error",
             "message": f"Registration failed: {str(e)}",
             "suggestion": "Ensure the image contains a clear, front-facing face with good lighting"
         }
-        
+
         if params.response_format == ResponseFormat.JSON:
             return json.dumps(error_response, indent=2)
         else:
@@ -1142,11 +1226,22 @@ async def recognize_face(params: RecognizeFaceInput) -> str:
         - Image quality and lighting affect recognition accuracy
     """
     try:
+        # Get client ID for audit logging
+        client_id = get_current_client_id()
+
         # Health Check: Verify InsightFace is available
         if not health_checker.is_healthy(ComponentType.INSIGHTFACE):
             health = health_checker.get_health(ComponentType.INSIGHTFACE)
             error_msg = f"Face recognition unavailable: {health.message}"
             result = {"status": RecognitionStatus.ERROR.value, "message": error_msg}
+
+            # Audit log: Recognition failure (service unavailable)
+            audit_logger.log_recognition(
+                client_id=client_id,
+                outcome=AuditOutcome.FAILURE,
+                error_message=error_msg
+            )
+
             if params.response_format == ResponseFormat.JSON:
                 return json.dumps(result, indent=2)
             return f"# Error: Face Recognition Unavailable\n\n{error_msg}\n\nPlease contact your system administrator."
@@ -1156,6 +1251,14 @@ async def recognize_face(params: RecognizeFaceInput) -> str:
             health = health_checker.get_health(ComponentType.CHROMADB)
             error_msg = f"Database unavailable: {health.message}. Recognition requires full database access."
             result = {"status": RecognitionStatus.ERROR.value, "message": error_msg}
+
+            # Audit log: Recognition failure (database unavailable)
+            audit_logger.log_recognition(
+                client_id=client_id,
+                outcome=AuditOutcome.FAILURE,
+                error_message=error_msg
+            )
+
             if params.response_format == ResponseFormat.JSON:
                 return json.dumps(result, indent=2)
             return f"# Error: Database Unavailable\n\n{error_msg}\n\nRecognition is disabled in degraded mode."
@@ -1243,6 +1346,21 @@ async def recognize_face(params: RecognizeFaceInput) -> str:
                     "recognition_count": new_count
                 }
             }
+
+            # Audit log: Successful recognition
+            audit_logger.log_recognition(
+                client_id=client_id,
+                outcome=AuditOutcome.SUCCESS,
+                user_id=best_match["user_id"],
+                user_name=best_match["name"],
+                confidence_score=1.0 - best_distance,  # Convert distance to similarity
+                threshold=params.confidence_threshold,
+                biometric_data={
+                    "distance": best_distance,
+                    "detection_score": input_features.get("detection_score"),
+                    "landmark_quality": input_features.get("landmark_quality")
+                }
+            )
         elif best_distance < 0.50:  # Close but not quite
             result = {
                 "status": RecognitionStatus.LOW_CONFIDENCE.value,
@@ -1254,12 +1372,42 @@ async def recognize_face(params: RecognizeFaceInput) -> str:
                 },
                 "message": f"Match found but distance ({best_distance:.4f}) is above threshold ({params.confidence_threshold:.4f})"
             }
+
+            # Audit log: Low confidence recognition
+            audit_logger.log_recognition(
+                client_id=client_id,
+                outcome=AuditOutcome.FAILURE,
+                user_id=best_match["user_id"],
+                user_name=best_match["name"],
+                confidence_score=1.0 - best_distance,
+                threshold=params.confidence_threshold,
+                biometric_data={
+                    "distance": best_distance,
+                    "detection_score": input_features.get("detection_score"),
+                    "landmark_quality": input_features.get("landmark_quality")
+                },
+                error_message="Low confidence match - below threshold"
+            )
         else:
             result = {
                 "status": RecognitionStatus.NOT_RECOGNIZED.value,
                 "distance": best_distance,
                 "message": "No matching user found in database"
             }
+
+            # Audit log: Not recognized
+            audit_logger.log_recognition(
+                client_id=client_id,
+                outcome=AuditOutcome.FAILURE,
+                confidence_score=1.0 - best_distance if best_distance < 2.0 else 0.0,
+                threshold=params.confidence_threshold,
+                biometric_data={
+                    "distance": best_distance,
+                    "detection_score": input_features.get("detection_score"),
+                    "landmark_quality": input_features.get("landmark_quality")
+                },
+                error_message="No matching user found"
+            )
 
         # Format response
         if params.response_format == ResponseFormat.JSON:
@@ -1268,12 +1416,23 @@ async def recognize_face(params: RecognizeFaceInput) -> str:
             return format_recognition_result_markdown(result)
     
     except Exception as e:
+        # Audit log: Recognition failure
+        try:
+            client_id = get_current_client_id()
+            audit_logger.log_recognition(
+                client_id=client_id,
+                outcome=AuditOutcome.FAILURE,
+                error_message=str(e)
+            )
+        except:
+            pass  # Don't let audit logging failure prevent error reporting
+
         error_result = {
             "status": RecognitionStatus.ERROR.value,
             "message": f"Recognition failed: {str(e)}",
             "distance": 1.0
         }
-        
+
         if params.response_format == ResponseFormat.JSON:
             return json.dumps(error_result, indent=2)
         else:
@@ -1318,6 +1477,9 @@ async def get_user_profile(params: GetUserProfileInput) -> str:
         with `skyy_list_users` tool.
     """
     try:
+        # Get client ID for audit logging
+        client_id = get_current_client_id()
+
         # Load system config
         load_system_config()
 
@@ -1337,6 +1499,14 @@ async def get_user_profile(params: GetUserProfileInput) -> str:
                     "suggestion": "Use skyy_list_users to see all registered users"
                 }
 
+                # Audit log: Profile access failure (user not found)
+                audit_logger.log_profile_access(
+                    client_id=client_id,
+                    outcome=AuditOutcome.FAILURE,
+                    user_id=params.user_id,
+                    error_message="User not found"
+                )
+
                 if params.response_format == ResponseFormat.JSON:
                     return json.dumps(error, indent=2)
                 else:
@@ -1345,6 +1515,14 @@ async def get_user_profile(params: GetUserProfileInput) -> str:
             # Extract user data from ChromaDB metadata
             chroma_metadata = result["metadatas"][0] if result["metadatas"] else {}
             user_data = extract_user_data_from_chroma_metadata(chroma_metadata)
+
+            # Audit log: Successful profile access
+            audit_logger.log_profile_access(
+                client_id=client_id,
+                outcome=AuditOutcome.SUCCESS,
+                user_id=params.user_id,
+                user_name=user_data["name"]
+            )
 
             # Format response
             if params.response_format == ResponseFormat.JSON:
@@ -1367,12 +1545,32 @@ async def get_user_profile(params: GetUserProfileInput) -> str:
                 "suggestion": "Use skyy_list_users to see all registered users"
             }
 
+            # Audit log: Profile access failure (user not found)
+            audit_logger.log_profile_access(
+                client_id=client_id,
+                outcome=AuditOutcome.FAILURE,
+                user_id=params.user_id,
+                error_message="User not found"
+            )
+
             if params.response_format == ResponseFormat.JSON:
                 return json.dumps(error, indent=2)
             else:
                 return f"# User Not Found\n\n**User ID:** {params.user_id}\n\nThis user is not registered. Use `skyy_list_users` to see all registered users."
-    
+
     except Exception as e:
+        # Audit log: Profile access failure
+        try:
+            client_id = get_current_client_id()
+            audit_logger.log_profile_access(
+                client_id=client_id,
+                outcome=AuditOutcome.FAILURE,
+                user_id=params.user_id,
+                error_message=str(e)
+            )
+        except:
+            pass  # Don't let audit logging failure prevent error reporting
+
         error = {
             "status": "error",
             "message": f"Failed to retrieve profile: {str(e)}"
@@ -1424,6 +1622,9 @@ async def list_users(params: ListUsersInput) -> str:
         The response includes has_more and next_offset for easy pagination.
     """
     try:
+        # Get client ID for audit logging
+        client_id = get_current_client_id()
+
         # Load system config
         load_system_config()
 
@@ -1437,6 +1638,13 @@ async def list_users(params: ListUsersInput) -> str:
 
         if not result["ids"]:
             # No users in database
+            # Audit log: List users (empty database)
+            audit_logger.log_profile_access(
+                client_id=client_id,
+                outcome=AuditOutcome.SUCCESS,
+                additional_info={"total_users": 0, "offset": params.offset, "limit": params.limit}
+            )
+
             if params.response_format == ResponseFormat.JSON:
                 response = {
                     "total": 0,
@@ -1465,6 +1673,18 @@ async def list_users(params: ListUsersInput) -> str:
         total = len(users_list)
         paginated_users = users_list[params.offset:params.offset + params.limit]
 
+        # Audit log: Successful list users
+        audit_logger.log_profile_access(
+            client_id=client_id,
+            outcome=AuditOutcome.SUCCESS,
+            additional_info={
+                "total_users": total,
+                "returned_count": len(paginated_users),
+                "offset": params.offset,
+                "limit": params.limit
+            }
+        )
+
         # Format response
         if params.response_format == ResponseFormat.JSON:
             has_more = total > params.offset + len(paginated_users)
@@ -1491,6 +1711,17 @@ async def list_users(params: ListUsersInput) -> str:
             return format_user_list_markdown(paginated_users, total, params.offset, params.limit)
     
     except Exception as e:
+        # Audit log: List users failure
+        try:
+            client_id = get_current_client_id()
+            audit_logger.log_profile_access(
+                client_id=client_id,
+                outcome=AuditOutcome.FAILURE,
+                error_message=str(e)
+            )
+        except:
+            pass  # Don't let audit logging failure prevent error reporting
+
         error = {
             "status": "error",
             "message": f"Failed to list users: {str(e)}"
@@ -1544,6 +1775,9 @@ async def update_user(params: UpdateUserInput) -> str:
         Returns error if user_id not found or if update fails.
     """
     try:
+        # Get client ID for audit logging
+        client_id = get_current_client_id()
+
         # Load system config
         load_system_config()
 
@@ -1563,6 +1797,14 @@ async def update_user(params: UpdateUserInput) -> str:
                     "message": f"User ID '{params.user_id}' not found",
                     "suggestion": "Use skyy_list_users to see all registered users"
                 }
+
+                # Audit log: Update failure (user not found)
+                audit_logger.log_user_update(
+                    client_id=client_id,
+                    outcome=AuditOutcome.FAILURE,
+                    user_id=params.user_id,
+                    error_message="User not found"
+                )
 
                 if params.response_format == ResponseFormat.JSON:
                     return json.dumps(error, indent=2)
@@ -1602,6 +1844,21 @@ async def update_user(params: UpdateUserInput) -> str:
             # Extract updated user data for response
             user_data = extract_user_data_from_chroma_metadata(updated_metadata)
 
+            # Audit log: Successful update
+            changes = {}
+            if params.name is not None:
+                changes["name"] = params.name
+            if params.metadata is not None:
+                changes["metadata"] = params.metadata
+
+            audit_logger.log_user_update(
+                client_id=client_id,
+                outcome=AuditOutcome.SUCCESS,
+                user_id=params.user_id,
+                user_name=user_data["name"],
+                changes=changes
+            )
+
             # Format response
             if params.response_format == ResponseFormat.JSON:
                 response = {
@@ -1625,12 +1882,32 @@ async def update_user(params: UpdateUserInput) -> str:
                 "suggestion": "Use skyy_list_users to see all registered users"
             }
 
+            # Audit log: Update failure (user not found)
+            audit_logger.log_user_update(
+                client_id=client_id,
+                outcome=AuditOutcome.FAILURE,
+                user_id=params.user_id,
+                error_message="User not found"
+            )
+
             if params.response_format == ResponseFormat.JSON:
                 return json.dumps(error, indent=2)
             else:
                 return f"# User Not Found\n\n**User ID:** {params.user_id}\n\nThis user is not registered."
-    
+
     except Exception as e:
+        # Audit log: Update failure
+        try:
+            client_id = get_current_client_id()
+            audit_logger.log_user_update(
+                client_id=client_id,
+                outcome=AuditOutcome.FAILURE,
+                user_id=params.user_id,
+                error_message=str(e)
+            )
+        except:
+            pass  # Don't let audit logging failure prevent error reporting
+
         error = {
             "status": "error",
             "message": f"Failed to update user: {str(e)}"
@@ -1682,6 +1959,9 @@ async def delete_user(params: DeleteUserInput) -> str:
         Returns error if user_id not found or deletion fails.
     """
     try:
+        # Get client ID for audit logging
+        client_id = get_current_client_id()
+
         # Load system config
         load_system_config()
 
@@ -1700,6 +1980,14 @@ async def delete_user(params: DeleteUserInput) -> str:
                     "message": f"User ID '{params.user_id}' not found",
                     "suggestion": "Use skyy_list_users to see all registered users"
                 }
+
+                # Audit log: Deletion failure (user not found)
+                audit_logger.log_deletion(
+                    client_id=client_id,
+                    outcome=AuditOutcome.FAILURE,
+                    user_id=params.user_id,
+                    error_message="User not found"
+                )
 
                 if params.response_format == ResponseFormat.JSON:
                     return json.dumps(error, indent=2)
@@ -1724,6 +2012,14 @@ async def delete_user(params: DeleteUserInput) -> str:
             except Exception as e:
                 print(f"Warning: Failed to delete user from ChromaDB: {e}")
 
+            # Audit log: Successful deletion
+            audit_logger.log_deletion(
+                client_id=client_id,
+                outcome=AuditOutcome.SUCCESS,
+                user_id=params.user_id,
+                user_name=user_name
+            )
+
             # Format response
             if params.response_format == ResponseFormat.JSON:
                 response = {
@@ -1742,12 +2038,32 @@ async def delete_user(params: DeleteUserInput) -> str:
                 "suggestion": "Use skyy_list_users to see all registered users"
             }
 
+            # Audit log: Deletion failure (user not found)
+            audit_logger.log_deletion(
+                client_id=client_id,
+                outcome=AuditOutcome.FAILURE,
+                user_id=params.user_id,
+                error_message="User not found"
+            )
+
             if params.response_format == ResponseFormat.JSON:
                 return json.dumps(error, indent=2)
             else:
                 return f"# User Not Found\n\n**User ID:** {params.user_id}\n\nThis user is not registered."
-    
+
     except Exception as e:
+        # Audit log: Deletion failure
+        try:
+            client_id = get_current_client_id()
+            audit_logger.log_deletion(
+                client_id=client_id,
+                outcome=AuditOutcome.FAILURE,
+                user_id=params.user_id,
+                error_message=str(e)
+            )
+        except:
+            pass  # Don't let audit logging failure prevent error reporting
+
         error = {
             "status": "error",
             "message": f"Failed to delete user: {str(e)}"
@@ -1791,12 +2107,15 @@ async def get_database_stats(params: GetDatabaseStatsInput) -> str:
         - Track recognition patterns
     """
     try:
+        # Get client ID for audit logging
+        client_id = get_current_client_id()
+
         db = load_database()
         users = db.get("users", {})
-        
+
         total_users = len(users)
         total_recognitions = sum(user.get("recognition_count", 0) for user in users.values())
-        
+
         # Find most recognized user
         most_active_user = None
         max_recognitions = 0
@@ -1805,7 +2124,7 @@ async def get_database_stats(params: GetDatabaseStatsInput) -> str:
             if count > max_recognitions:
                 max_recognitions = count
                 most_active_user = user
-        
+
         stats = {
             "total_users": total_users,
             "total_recognitions": total_recognitions,
@@ -1813,14 +2132,25 @@ async def get_database_stats(params: GetDatabaseStatsInput) -> str:
             "database_created": db.get("metadata", {}).get("created"),
             "storage_location": str(DATABASE_PATH)
         }
-        
+
         if most_active_user:
             stats["most_active_user"] = {
                 "name": most_active_user["name"],
                 "user_id": most_active_user["user_id"],
                 "recognition_count": most_active_user.get("recognition_count", 0)
             }
-        
+
+        # Audit log: Successful database stats query
+        audit_logger.log_database_operation(
+            client_id=client_id,
+            outcome=AuditOutcome.SUCCESS,
+            operation_type="get_stats",
+            additional_info={
+                "total_users": total_users,
+                "total_recognitions": total_recognitions
+            }
+        )
+
         # Format response
         if params.response_format == ResponseFormat.JSON:
             return json.dumps(stats, indent=2)
@@ -1839,6 +2169,18 @@ async def get_database_stats(params: GetDatabaseStatsInput) -> str:
             return output
     
     except Exception as e:
+        # Audit log: Database stats failure
+        try:
+            client_id = get_current_client_id()
+            audit_logger.log_database_operation(
+                client_id=client_id,
+                outcome=AuditOutcome.FAILURE,
+                operation_type="get_stats",
+                error_message=str(e)
+            )
+        except:
+            pass  # Don't let audit logging failure prevent error reporting
+
         error = {
             "status": "error",
             "message": f"Failed to get statistics: {str(e)}"
@@ -1886,8 +2228,24 @@ async def get_health_status(params: HealthStatusInput) -> str:
              Markdown format includes: formatted health report with recommendations
     """
     try:
+        # Get client ID for audit logging
+        client_id = get_current_client_id()
+
         # Get comprehensive health summary
         summary = health_checker.get_health_summary()
+
+        # Audit log: Health status query
+        audit_logger.log_health_event(
+            event_type=AuditEventType.HEALTH_CHECK,
+            component="system",
+            status=summary["overall_status"],
+            message="Health status query executed",
+            client_id=client_id,
+            details={
+                "components_healthy": sum(1 for c in summary["components"].values() if c["status"] == "healthy"),
+                "degraded_mode": summary["degraded_mode"]["active"]
+            }
+        )
 
         if params.response_format == ResponseFormat.JSON:
             return json.dumps(summary, indent=2)
@@ -1950,6 +2308,20 @@ async def get_health_status(params: HealthStatusInput) -> str:
             return output
 
     except Exception as e:
+        # Audit log: Health status query failure
+        try:
+            client_id = get_current_client_id()
+            audit_logger.log_health_event(
+                event_type=AuditEventType.HEALTH_CHECK,
+                component="system",
+                status="error",
+                message="Health status query failed",
+                client_id=client_id,
+                error=str(e)
+            )
+        except:
+            pass  # Don't let audit logging failure prevent error reporting
+
         error = {
             "status": "error",
             "message": f"Failed to get health status: {str(e)}"
