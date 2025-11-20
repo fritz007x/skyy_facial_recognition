@@ -188,23 +188,27 @@ class AuditLogger:
 
     def log_registration(
         self,
-        user_id: str,
-        name: str,
         client_id: str,
         outcome: AuditOutcome,
-        detection_score: Optional[float] = None,
-        face_quality: Optional[float] = None,
-        metadata: Optional[Dict[str, Any]] = None,
-        error: Optional[str] = None
+        user_name: Optional[str] = None,
+        user_id: Optional[str] = None,
+        biometric_data: Optional[Dict[str, Any]] = None,
+        additional_info: Optional[Dict[str, Any]] = None,
+        error_message: Optional[str] = None
     ):
         """Log a user registration event."""
         details = {
             "operation": "register_user",
-            "name": name if not self.redact_pii else "[REDACTED]",
-            "detection_score": detection_score,
-            "face_quality": face_quality,
-            "metadata": metadata
+            "name": user_name if not self.redact_pii else "[REDACTED]" if user_name else None,
         }
+
+        # Add biometric data if provided
+        if biometric_data:
+            details.update(biometric_data)
+
+        # Add additional info if provided
+        if additional_info:
+            details.update(additional_info)
 
         self.log_audit_event(
             event_type=AuditEventType.REGISTRATION,
@@ -212,51 +216,54 @@ class AuditLogger:
             details=details,
             client_id=client_id,
             user_id=user_id,
-            error_message=error
+            error_message=error_message
         )
 
     def log_recognition(
         self,
         client_id: str,
         outcome: AuditOutcome,
-        recognized_user_id: Optional[str] = None,
-        confidence: Optional[float] = None,
-        distance: Optional[float] = None,
+        user_id: Optional[str] = None,
+        user_name: Optional[str] = None,
+        confidence_score: Optional[float] = None,
         threshold: Optional[float] = None,
-        num_faces_detected: int = 1,
-        error: Optional[str] = None
+        biometric_data: Optional[Dict[str, Any]] = None,
+        error_message: Optional[str] = None
     ):
         """Log a face recognition attempt."""
         details = {
             "operation": "recognize_face",
-            "confidence": confidence,
-            "distance": distance,
+            "name": user_name if not self.redact_pii else "[REDACTED]" if user_name else None,
+            "confidence_score": confidence_score,
             "threshold": threshold,
-            "num_faces_detected": num_faces_detected,
-            "recognition_status": "recognized" if recognized_user_id else "not_recognized"
+            "recognition_status": "recognized" if user_id else "not_recognized"
         }
+
+        # Add biometric data if provided
+        if biometric_data:
+            details.update(biometric_data)
 
         self.log_audit_event(
             event_type=AuditEventType.RECOGNITION,
             outcome=outcome,
             details=details,
             client_id=client_id,
-            user_id=recognized_user_id,
-            error_message=error
+            user_id=user_id,
+            error_message=error_message
         )
 
     def log_deletion(
         self,
-        user_id: str,
         client_id: str,
         outcome: AuditOutcome,
-        name: Optional[str] = None,
-        error: Optional[str] = None
+        user_id: str,
+        user_name: Optional[str] = None,
+        error_message: Optional[str] = None
     ):
         """Log a user deletion event."""
         details = {
             "operation": "delete_user",
-            "name": name if not self.redact_pii else "[REDACTED]"
+            "name": user_name if not self.redact_pii else "[REDACTED]" if user_name else None
         }
 
         self.log_audit_event(
@@ -265,21 +272,28 @@ class AuditLogger:
             details=details,
             client_id=client_id,
             user_id=user_id,
-            error_message=error
+            error_message=error_message
         )
 
     def log_profile_access(
         self,
-        user_id: str,
         client_id: str,
         outcome: AuditOutcome,
+        user_id: Optional[str] = None,
+        user_name: Optional[str] = None,
         operation: str = "get_profile",
-        error: Optional[str] = None
+        additional_info: Optional[Dict[str, Any]] = None,
+        error_message: Optional[str] = None
     ):
         """Log a user profile access event."""
         details = {
-            "operation": operation
+            "operation": operation,
+            "name": user_name if not self.redact_pii else "[REDACTED]" if user_name else None
         }
+
+        # Add additional info if provided
+        if additional_info:
+            details.update(additional_info)
 
         self.log_audit_event(
             event_type=AuditEventType.PROFILE_ACCESS,
@@ -287,21 +301,23 @@ class AuditLogger:
             details=details,
             client_id=client_id,
             user_id=user_id,
-            error_message=error
+            error_message=error_message
         )
 
     def log_user_update(
         self,
-        user_id: str,
         client_id: str,
         outcome: AuditOutcome,
-        updated_fields: list,
-        error: Optional[str] = None
+        user_id: str,
+        user_name: Optional[str] = None,
+        changes: Optional[Dict[str, Any]] = None,
+        error_message: Optional[str] = None
     ):
         """Log a user profile update event."""
         details = {
             "operation": "update_user",
-            "updated_fields": updated_fields
+            "name": user_name if not self.redact_pii else "[REDACTED]" if user_name else None,
+            "changes": changes if changes else {}
         }
 
         self.log_audit_event(
@@ -310,31 +326,36 @@ class AuditLogger:
             details=details,
             client_id=client_id,
             user_id=user_id,
-            error_message=error
+            error_message=error_message
         )
 
     def log_database_operation(
         self,
-        operation: str,
         client_id: str,
         outcome: AuditOutcome,
+        operation_type: Optional[str] = None,
         record_count: Optional[int] = None,
         query_params: Optional[Dict[str, Any]] = None,
-        error: Optional[str] = None
+        additional_info: Optional[Dict[str, Any]] = None,
+        error_message: Optional[str] = None
     ):
         """Log a database operation."""
         details = {
-            "operation": operation,
+            "operation": operation_type,
             "record_count": record_count,
             "query_params": query_params
         }
+
+        # Add additional info if provided
+        if additional_info:
+            details.update(additional_info)
 
         self.log_audit_event(
             event_type=AuditEventType.DATABASE_QUERY,
             outcome=outcome,
             details=details,
             client_id=client_id,
-            error_message=error
+            error_message=error_message
         )
 
     def log_auth_event(
@@ -366,7 +387,9 @@ class AuditLogger:
         component: str,
         status: str,
         message: str,
-        details: Optional[Dict[str, Any]] = None
+        client_id: Optional[str] = None,
+        details: Optional[Dict[str, Any]] = None,
+        error: Optional[str] = None
     ):
         """Log a health check or state change event."""
         event_details = {
@@ -383,7 +406,9 @@ class AuditLogger:
         self.log_audit_event(
             event_type=event_type,
             outcome=outcome,
-            details=event_details
+            details=event_details,
+            client_id=client_id,
+            error_message=error
         )
 
     def log_batch_enrollment(
