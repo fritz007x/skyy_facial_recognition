@@ -34,6 +34,9 @@ from chromadb.config import Settings
 # OAuth 2.1 Authentication
 from oauth_middleware import require_auth, AuthenticationError, create_auth_error_response
 
+# Health Monitoring
+from health_checker import health_checker, HealthStatus, ComponentType
+
 # Initialize FastMCP server
 mcp = FastMCP("skyy_facial_recognition_mcp")
 
@@ -91,6 +94,87 @@ def initialize_chroma():
             }
         )
     return chroma_collection
+
+
+# ============================================================================
+# Health-Aware Initialization
+# ============================================================================
+
+async def perform_health_checks():
+    """
+    Perform comprehensive health checks on all critical components.
+
+    This runs during server initialization to verify:
+    - InsightFace model can be loaded
+    - ChromaDB is accessible
+    - OAuth system is configured
+
+    Returns health status and only advertises capabilities that work.
+    """
+    from oauth_config import oauth_config
+
+    # Check InsightFace
+    await health_checker.check_insightface(initialize_face_app)
+
+    # Check ChromaDB
+    await health_checker.check_chromadb(initialize_chroma)
+
+    # Check OAuth
+    await health_checker.check_oauth(oauth_config)
+
+    # Log health summary
+    summary = health_checker.get_health_summary()
+    print(f"\n[Health Check] Overall Status: {summary['overall_status']}")
+    print(f"[Health Check] InsightFace: {summary['components']['insightface']['status']}")
+    print(f"[Health Check] ChromaDB: {summary['components']['chromadb']['status']}")
+    print(f"[Health Check] OAuth: {summary['components']['oauth']['status']}")
+
+    if summary['degraded_mode']['active']:
+        print(f"[Health Check] WARNING: Operating in degraded mode")
+        print(f"[Health Check] Queued registrations: {summary['degraded_mode']['queued_registrations']}")
+
+    return summary
+
+
+def on_health_state_change(component: ComponentType, old_status: HealthStatus, new_status: HealthStatus):
+    """
+    Callback for health state changes.
+
+    Sends MCP notification to clients when component health changes,
+    allowing clients to refresh their tool lists and understand current capabilities.
+    """
+    print(f"\n[Health Change] {component.value}: {old_status.value} -> {new_status.value}")
+
+    # Get current capabilities
+    capabilities = health_checker.get_available_capabilities()
+    available_count = sum(1 for v in capabilities.values() if v)
+
+    print(f"[Health Change] Available capabilities: {available_count}/{len(capabilities)}")
+
+    # Note: MCP notification sending would go here
+    # FastMCP doesn't currently expose a notification API in the decorator-based interface
+    # This is logged for monitoring and debugging
+    # Future enhancement: Use lower-level MCP protocol to send notifications/tools/list_changed
+
+
+# Register health state change callback
+health_checker.register_state_change_callback(on_health_state_change)
+
+
+# Run health checks on module initialization
+import asyncio
+try:
+    # Run health checks in event loop
+    loop = asyncio.get_event_loop()
+    if loop.is_running():
+        # If loop is already running (in some environments), schedule it
+        asyncio.create_task(perform_health_checks())
+    else:
+        # Run synchronously during module import
+        loop.run_until_complete(perform_health_checks())
+except Exception as e:
+    print(f"[Health Check] Warning: Health check failed during initialization: {e}")
+    print(f"[Health Check] Server will start but may have limited functionality")
 
 
 # ============================================================================
@@ -303,6 +387,25 @@ class DeleteUserInput(BaseModel):
 
 class GetDatabaseStatsInput(BaseModel):
     """Input model for getting database statistics."""
+    model_config = ConfigDict(
+        str_strip_whitespace=True,
+        validate_assignment=True,
+        extra='forbid'
+    )
+
+    access_token: str = Field(
+        ...,
+        description="OAuth 2.1 access token for authentication",
+        min_length=20
+    )
+    response_format: ResponseFormat = Field(
+        default=ResponseFormat.MARKDOWN,
+        description="Output format: 'markdown' for human-readable or 'json' for machine-readable"
+    )
+
+
+class HealthStatusInput(BaseModel):
+    """Input model for checking system health status."""
     model_config = ConfigDict(
         str_strip_whitespace=True,
         validate_assignment=True,
@@ -837,6 +940,14 @@ async def register_user(params: RegisterUserInput) -> str:
         - Good lighting improves recognition accuracy
     """
     try:
+        # Health Check: Verify InsightFace is available
+        if not health_checker.is_healthy(ComponentType.INSIGHTFACE):
+            health = health_checker.get_health(ComponentType.INSIGHTFACE)
+            error_msg = f"Face recognition unavailable: {health.message}"
+            if params.response_format == ResponseFormat.JSON:
+                return json.dumps({"status": "error", "message": error_msg}, indent=2)
+            return f"# Error: Face Recognition Unavailable\n\n{error_msg}\n\nPlease contact your system administrator."
+
         # Load system config (no user data)
         load_system_config()
 
@@ -879,7 +990,40 @@ async def register_user(params: RegisterUserInput) -> str:
                 # Serialize complex types as JSON strings
                 chroma_metadata[f"custom_{key}"] = json.dumps(value)
 
-        # Add embedding AND all metadata to ChromaDB
+        # Health Check: ChromaDB availability
+        if not health_checker.is_healthy(ComponentType.CHROMADB):
+            # DEGRADED MODE: Queue registration for later processing
+            health_checker.queue_registration(
+                name=params.name,
+                image_data=params.image_data,
+                metadata=custom_metadata
+            )
+
+            queue_size = len(health_checker.registration_queue)
+            degraded_msg = (
+                f"Database temporarily unavailable. Registration queued for processing when service recovers. "
+                f"Position in queue: {queue_size}"
+            )
+
+            if params.response_format == ResponseFormat.JSON:
+                return json.dumps({
+                    "status": "queued",
+                    "message": degraded_msg,
+                    "user": {
+                        "name": params.name,
+                        "queue_position": queue_size,
+                        "will_be_assigned_user_id": user_id
+                    }
+                }, indent=2)
+            else:
+                output = f"# Registration Queued (Degraded Mode)\n\n"
+                output += f"**Name:** {params.name}\n"
+                output += f"**Queue Position:** {queue_size}\n"
+                output += f"**Will be assigned User ID:** {user_id}\n\n"
+                output += degraded_msg + "\n"
+                return output
+
+        # Normal mode: Add embedding AND all metadata to ChromaDB
         collection = initialize_chroma()
         collection.add(
             ids=[user_id],
@@ -998,6 +1142,24 @@ async def recognize_face(params: RecognizeFaceInput) -> str:
         - Image quality and lighting affect recognition accuracy
     """
     try:
+        # Health Check: Verify InsightFace is available
+        if not health_checker.is_healthy(ComponentType.INSIGHTFACE):
+            health = health_checker.get_health(ComponentType.INSIGHTFACE)
+            error_msg = f"Face recognition unavailable: {health.message}"
+            result = {"status": RecognitionStatus.ERROR.value, "message": error_msg}
+            if params.response_format == ResponseFormat.JSON:
+                return json.dumps(result, indent=2)
+            return f"# Error: Face Recognition Unavailable\n\n{error_msg}\n\nPlease contact your system administrator."
+
+        # Health Check: Verify ChromaDB is available (not degraded)
+        if not health_checker.is_healthy(ComponentType.CHROMADB):
+            health = health_checker.get_health(ComponentType.CHROMADB)
+            error_msg = f"Database unavailable: {health.message}. Recognition requires full database access."
+            result = {"status": RecognitionStatus.ERROR.value, "message": error_msg}
+            if params.response_format == ResponseFormat.JSON:
+                return json.dumps(result, indent=2)
+            return f"# Error: Database Unavailable\n\n{error_msg}\n\nRecognition is disabled in degraded mode."
+
         # Load system config
         load_system_config()
 
@@ -1686,6 +1848,117 @@ async def get_database_stats(params: GetDatabaseStatsInput) -> str:
             return json.dumps(error, indent=2)
         else:
             return f"# ❌ Error\n\n{str(e)}"
+
+
+@mcp.tool(
+    name="skyy_get_health_status",
+    annotations={
+        "title": "Get System Health Status",
+        "readOnlyHint": True,
+        "destructiveHint": False,
+        "idempotentHint": True,
+        "openWorldHint": False
+    }
+)
+@require_auth
+async def get_health_status(params: HealthStatusInput) -> str:
+    """Get comprehensive health status of all system components.
+
+    This tool provides real-time health information about:
+    - InsightFace model availability
+    - ChromaDB database status
+    - OAuth authentication system
+    - Available capabilities
+    - Degraded mode status (if active)
+
+    Use this tool to:
+    - Monitor system health
+    - Diagnose issues
+    - Verify capabilities before operations
+    - Check degraded mode status
+
+    Args:
+        params (HealthStatusInput): Input parameters including access_token and response_format
+
+    Returns:
+        str: Comprehensive health status report.
+             JSON format includes: component health, capabilities, degraded mode info
+             Markdown format includes: formatted health report with recommendations
+    """
+    try:
+        # Get comprehensive health summary
+        summary = health_checker.get_health_summary()
+
+        if params.response_format == ResponseFormat.JSON:
+            return json.dumps(summary, indent=2)
+        else:
+            # Markdown format
+            overall = summary["overall_status"]
+            status_emoji = "✅" if overall == "healthy" else "⚠️"
+
+            output = f"# {status_emoji} System Health Status\n\n"
+            output += f"**Overall Status:** {overall.upper()}\n\n"
+
+            # Component health
+            output += "## Components\n\n"
+            for comp_name, comp_data in summary["components"].items():
+                status = comp_data["status"]
+                comp_emoji = {"healthy": "✅", "degraded": "⚠️", "unavailable": "❌"}[status]
+                output += f"### {comp_emoji} {comp_name.upper()}\n"
+                output += f"- **Status:** {status}\n"
+                output += f"- **Message:** {comp_data['message']}\n"
+                output += f"- **Last Checked:** {comp_data['last_checked']}\n"
+                if comp_data['error']:
+                    output += f"- **Error:** {comp_data['error']}\n"
+                output += "\n"
+
+            # Capabilities
+            output += "## Available Capabilities\n\n"
+            capabilities = summary["capabilities"]
+            available = [k for k, v in capabilities.items() if v]
+            unavailable = [k for k, v in capabilities.items() if not v]
+
+            if available:
+                output += "**Available:**\n"
+                for cap in available:
+                    output += f"- ✅ {cap}\n"
+                output += "\n"
+
+            if unavailable:
+                output += "**Unavailable:**\n"
+                for cap in unavailable:
+                    output += f"- ❌ {cap}\n"
+                output += "\n"
+
+            # Degraded mode
+            degraded = summary["degraded_mode"]
+            if degraded["active"]:
+                output += "## ⚠️ Degraded Mode Active\n\n"
+                output += "The system is operating in degraded mode due to component unavailability.\n\n"
+                if degraded["queued_registrations"] > 0:
+                    output += f"**Queued Registrations:** {degraded['queued_registrations']}\n"
+                    output += "Registrations will be processed automatically when the database recovers.\n\n"
+                output += "**Impact:**\n"
+                output += "- New registrations are queued (not immediately available)\n"
+                output += "- Face recognition is disabled\n"
+                output += "- Database queries are unavailable\n\n"
+                output += "**Recommendation:** Contact your system administrator to restore full functionality.\n"
+            else:
+                output += "## ✅ Full Functionality\n\n"
+                output += "All systems are operational. All features are available.\n"
+
+            return output
+
+    except Exception as e:
+        error = {
+            "status": "error",
+            "message": f"Failed to get health status: {str(e)}"
+        }
+
+        if params.response_format == ResponseFormat.JSON:
+            return json.dumps(error, indent=2)
+        else:
+            return f"# ❌ Error\n\nFailed to retrieve health status: {str(e)}"
 
 
 # ============================================================================
