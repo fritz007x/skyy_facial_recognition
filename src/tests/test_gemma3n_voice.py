@@ -3,11 +3,15 @@ Automated Test for Gemma 3n Voice Assistant
 
 This test generates the wake word "Hello Gemma" using TTS and tests:
 1. TTS generation of wake word
-2. Gemma 3n speech recognition
+2. Whisper speech recognition (Ollama doesn't support audio input yet)
 3. Wake word detection
 4. Full voice recognition workflow
 
 Tests the complete pipeline without requiring manual voice input.
+
+NOTE: Originally attempted to use Gemma 3n's native audio capabilities, but
+Ollama does not support audio input yet (as of 2025). Using Whisper instead
+for audio transcription, with Gemma 3n available for text-based processing.
 """
 
 import asyncio
@@ -38,7 +42,15 @@ except ImportError:
     print("Install with: pip install soundfile numpy")
     sys.exit(1)
 
-# Ollama for Gemma 3n
+# Whisper for audio transcription (Ollama doesn't support audio input yet)
+try:
+    import whisper
+except ImportError:
+    print("ERROR: whisper not installed")
+    print("Install with: pip install openai-whisper")
+    sys.exit(1)
+
+# Ollama for Gemma 3n (text-based processing)
 try:
     import ollama
 except ImportError:
@@ -59,6 +71,11 @@ class Gemma3nVoiceTester:
         self.tts_engine = pyttsx3.init()
         self.sample_rate = 16000  # 16kHz for speech
         self.test_audio_path = None
+
+        # Load Whisper model for transcription
+        print("[System] Loading Whisper model...")
+        self.whisper_model = whisper.load_model("base")  # Fast, accurate enough for wake words
+        print("[System] Whisper model loaded")
 
         # Configure TTS for clear speech
         self._configure_tts()
@@ -145,9 +162,12 @@ class Gemma3nVoiceTester:
 
         return output_path
 
-    def test_gemma3n_transcription(self, audio_path: str, expected_text: str = "hello gemma") -> bool:
+    def test_whisper_transcription(self, audio_path: str, expected_text: str = "hello gemma") -> bool:
         """
-        Test Gemma 3n speech recognition.
+        Test Whisper speech recognition.
+
+        NOTE: Originally this was test_gemma3n_transcription, but Ollama does not support
+        audio input yet. Using Whisper as a proven, reliable alternative for audio transcription.
 
         Args:
             audio_path: Path to audio file
@@ -156,38 +176,16 @@ class Gemma3nVoiceTester:
         Returns:
             True if transcription matches expected text
         """
-        print(f"\n[Test] Testing Gemma 3n transcription...")
+        print(f"\n[Test] Testing Whisper transcription...")
 
         try:
-            # Get available Gemma models
-            response = ollama.list()
-            model_names = [model.model for model in response.models]
-            gemma_models = [m for m in model_names if 'gemma' in m.lower()]
+            # Transcribe using Whisper
+            print(f"[Test] Transcribing audio with Whisper...")
 
-            if not gemma_models:
-                print("[ERROR] No Gemma models found")
-                print("Install with: ollama pull gemma3n:2b-e2b")
-                return False
+            result = self.whisper_model.transcribe(audio_path)
+            transcription = result['text'].strip().lower()
 
-            gemma_model = gemma_models[0]
-            print(f"[Test] Using model: {gemma_model}")
-
-            # Read audio file as bytes
-            with open(audio_path, 'rb') as f:
-                audio_bytes = f.read()
-
-            # Transcribe using Gemma 3n
-            print(f"[Test] Sending audio to Gemma 3n ({len(audio_bytes)} bytes)...")
-
-            ollama_response = ollama.generate(
-                model=gemma_model,
-                prompt="Transcribe the following audio to text. Only output the transcribed text, nothing else:",
-                images=[audio_bytes],
-                stream=False
-            )
-
-            transcription = ollama_response['response'].strip().lower()
-            print(f"[Test] Gemma 3n transcribed: \"{transcription}\"")
+            print(f"[Test] Whisper transcribed: \"{transcription}\"")
 
             # Check if expected text is in transcription
             success = expected_text in transcription
@@ -201,7 +199,7 @@ class Gemma3nVoiceTester:
                 return False
 
         except Exception as e:
-            print(f"[ERROR] Gemma 3n transcription failed: {e}")
+            print(f"[ERROR] Whisper transcription failed: {e}")
             import traceback
             traceback.print_exc()
             return False
@@ -226,9 +224,9 @@ class Gemma3nVoiceTester:
             print("\n[Step 2/3] Converting audio to 16kHz mono...")
             converted_path = self.convert_audio_to_16khz(audio_path)
 
-            # Step 3: Test Gemma 3n transcription
-            print("\n[Step 3/3] Testing Gemma 3n transcription...")
-            success = self.test_gemma3n_transcription(converted_path, "hello gemma")
+            # Step 3: Test Whisper transcription
+            print("\n[Step 3/3] Testing Whisper transcription...")
+            success = self.test_whisper_transcription(converted_path, "hello gemma")
 
             # Cleanup
             try:
@@ -273,7 +271,7 @@ class Gemma3nVoiceTester:
                 converted_path = self.convert_audio_to_16khz(audio_path)
 
                 # Test transcription
-                success = self.test_gemma3n_transcription(converted_path, expected_text)
+                success = self.test_whisper_transcription(converted_path, expected_text)
                 results[spoken_text] = success
 
                 # Cleanup
@@ -312,9 +310,9 @@ class Gemma3nVoiceTester:
         print("\n" + "=" * 70)
 
         if failed == 0:
-            print("All tests passed! Gemma 3n voice recognition is working correctly.")
+            print("All tests passed! Whisper voice recognition is working correctly.")
         else:
-            print(f"Warning: {failed} test(s) failed. Check Gemma 3n configuration.")
+            print(f"Warning: {failed} test(s) failed. Check Whisper configuration.")
 
         print("=" * 70)
 
@@ -325,7 +323,8 @@ def main():
     print("         GEMMA 3N VOICE ASSISTANT - AUTOMATED TEST")
     print("=" * 70)
     print("\nThis test generates wake word audio using TTS and validates")
-    print("Gemma 3n's speech recognition capabilities.")
+    print("Whisper's speech recognition capabilities.")
+    print("(Note: Ollama doesn't support audio input yet)")
     print("\n" + "=" * 70)
 
     # Create tester
@@ -354,18 +353,8 @@ def main():
 
 if __name__ == "__main__":
     try:
-        # Check Ollama availability
-        print("\n[System] Checking Ollama availability...")
-        try:
-            models = ollama.list()
-            print("[OK] Ollama is running")
-        except Exception as e:
-            print(f"[ERROR] Ollama not available: {e}")
-            print("\nMake sure:")
-            print("  1. Ollama is installed (https://ollama.ai)")
-            print("  2. Ollama service is running")
-            print("  3. Gemma 3n is pulled: ollama pull gemma3n:2b-e2b")
-            sys.exit(1)
+        # Check Whisper availability (already done in imports)
+        print("\n[System] Whisper is ready for audio transcription")
 
         # Run tests
         exit_code = main()

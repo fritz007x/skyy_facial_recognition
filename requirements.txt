@@ -56,8 +56,9 @@ python-multipart>=0.0.6
 # Audit Logging
 loguru>=0.7.0
 
-# Voice Assistant (Gemma 3n with native speech recognition)
+# Voice Assistant (Gemma 3n with Whisper for speech recognition)
 ollama>=0.1.0
 sounddevice>=0.4.6
 soundfile>=0.12.1
 pyttsx3>=2.90
+openai-whisper>=20250625  # Audio transcription (Ollama doesn't support audio input yet)

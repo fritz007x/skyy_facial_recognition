@@ -1,14 +1,19 @@
 """
-Gemma 3n Voice Assistant - Using Native Speech Recognition
+Gemma 3n Voice Assistant - Using Whisper for Speech Recognition
 
-A voice-activated assistant using Gemma 3n's native multimodal capabilities:
-1. Listens for "Hello Gemma" using Gemma 3n's audio understanding
+A voice-activated assistant with these capabilities:
+1. Listens for "Hello Gemma" using Whisper speech recognition
 2. Captures face image from webcam
 3. Recognizes face using MCP server
 4. Greets user by name using text-to-speech
 
+NOTE: Originally designed to use Gemma 3n's native audio capabilities, but
+Ollama does not support audio input yet (as of 2025). Using Whisper instead
+for reliable audio transcription, with Gemma 3n available for text processing.
+
 Requires:
-- Gemma 3n model (via Ollama)
+- Whisper model (OpenAI) for audio transcription
+- Ollama with Gemma 3n (optional, for text-based processing)
 - Microphone for audio input
 - Webcam for facial recognition
 - Speakers for TTS output
@@ -27,14 +32,22 @@ import sounddevice as sd
 import soundfile as sf
 import tempfile
 
-# Ollama for Gemma 3n
+# Whisper for audio transcription (Ollama doesn't support audio input yet)
+try:
+    import whisper
+except ImportError:
+    print("ERROR: whisper not installed")
+    print("Install with: pip install openai-whisper")
+    sys.exit(1)
+
+# Ollama for Gemma 3n (optional, for text-based processing)
 try:
     import ollama
+    OLLAMA_AVAILABLE = True
 except ImportError:
-    print("ERROR: ollama not installed")
-    print("Install with: pip install ollama")
-    print("Then run: ollama pull gemma3n")
-    sys.exit(1)
+    print("WARNING: ollama not installed")
+    print("Voice recognition will work with Whisper, but Gemma 3n features disabled")
+    OLLAMA_AVAILABLE = False
 
 # Text-to-speech
 try:
@@ -55,13 +68,13 @@ from oauth_config import OAuthConfig
 
 class Gemma3nVoiceAssistant:
     """
-    Voice-activated facial recognition assistant using Gemma 3n.
+    Voice-activated facial recognition assistant using Whisper.
 
-    Uses Gemma 3n's native multimodal capabilities for speech recognition.
+    Uses Whisper for reliable speech recognition (Ollama doesn't support audio input yet).
     """
 
     def __init__(self):
-        """Initialize Gemma 3n voice assistant."""
+        """Initialize voice assistant with Whisper."""
         self.tts_engine = pyttsx3.init()
         self.access_token = None
         self.running = False
@@ -74,8 +87,16 @@ class Gemma3nVoiceAssistant:
         # Configure TTS
         self._configure_tts()
 
-        # Verify Gemma 3n is available
-        self._check_gemma3n()
+        # Load Whisper model for transcription
+        print("\n[System] Loading Whisper model...")
+        self.whisper_model = whisper.load_model("base")  # Fast and accurate for voice commands
+        print("[System] Whisper model loaded")
+
+        # Verify Gemma 3n is available (optional)
+        if OLLAMA_AVAILABLE:
+            self._check_gemma3n()
+        else:
+            self.gemma_model = None
 
     def _check_gemma3n(self):
         """Verify Gemma 3n model is available via Ollama."""
@@ -223,9 +244,12 @@ class Gemma3nVoiceAssistant:
 
         return temp_file.name
 
-    def transcribe_audio_with_gemma3n(self, audio_path: str) -> str:
+    def transcribe_audio_with_whisper(self, audio_path: str) -> str:
         """
-        Transcribe audio using Gemma 3n's native speech recognition.
+        Transcribe audio using Whisper speech recognition.
+
+        NOTE: Originally transcribe_audio_with_gemma3n, but Ollama does not support
+        audio input yet. Using Whisper as a proven, reliable alternative.
 
         Args:
             audio_path: Path to audio file
@@ -233,29 +257,18 @@ class Gemma3nVoiceAssistant:
         Returns:
             Transcribed text
         """
-        print("[Gemma 3n] Transcribing audio...")
+        print("[Whisper] Transcribing audio...")
 
         try:
-            # Read audio file as bytes
-            with open(audio_path, 'rb') as f:
-                audio_bytes = f.read()
-
-            # Use Gemma 3n for transcription
-            # Gemma 3n accepts audio input natively
-            response = ollama.generate(
-                model=self.gemma_model,
-                prompt="Transcribe the following audio to text:",
-                images=[audio_bytes],  # Audio is passed as binary data
-                stream=False
-            )
-
-            transcription = response['response'].strip()
-            print(f"[Gemma 3n] Transcribed: \"{transcription}\"")
+            # Transcribe using Whisper
+            result = self.whisper_model.transcribe(audio_path)
+            transcription = result['text'].strip()
+            print(f"[Whisper] Transcribed: \"{transcription}\"")
 
             return transcription.lower()
 
         except Exception as e:
-            print(f"[ERROR] Gemma 3n transcription failed: {e}")
+            print(f"[ERROR] Whisper transcription failed: {e}")
             return ""
         finally:
             # Clean up temporary file
@@ -338,7 +351,7 @@ class Gemma3nVoiceAssistant:
 
     def listen_for_wake_word(self) -> bool:
         """
-        Listen for wake word using Gemma 3n's native speech recognition.
+        Listen for wake word using Whisper speech recognition.
 
         Returns:
             True if wake word detected, False otherwise
@@ -348,8 +361,8 @@ class Gemma3nVoiceAssistant:
         # Record audio
         audio_path = self.record_audio(self.wake_word_duration)
 
-        # Transcribe using Gemma 3n
-        transcription = self.transcribe_audio_with_gemma3n(audio_path)
+        # Transcribe using Whisper
+        transcription = self.transcribe_audio_with_whisper(audio_path)
 
         # Check for wake word
         if transcription:
@@ -411,12 +424,14 @@ class Gemma3nVoiceAssistant:
             self.speak("I'm having trouble with the facial recognition system.")
 
     async def run(self):
-        """Run the Gemma 3n voice assistant main loop."""
+        """Run the voice assistant main loop."""
         print("\n" + "=" * 70)
         print("              GEMMA 3N VOICE ASSISTANT")
-        print("        Native Multimodal Speech Recognition")
+        print("           Whisper Speech Recognition")
         print("=" * 70)
-        print(f"\nModel: {self.gemma_model}")
+        print(f"\nSpeech Recognition: Whisper (base model)")
+        if self.gemma_model:
+            print(f"Text Processing: {self.gemma_model}")
         print("Wake word: 'Hello Gemma'")
         print("Action: Recognize face and greet user by name")
         print("\nPress Ctrl+C to exit\n")
@@ -426,13 +441,13 @@ class Gemma3nVoiceAssistant:
         self.setup_oauth()
 
         # Welcome
-        self.speak("Gemma 3n voice assistant activated. Say Hello Gemma to get started.")
+        self.speak("Voice assistant activated. Say Hello Gemma to get started.")
 
         self.running = True
 
         try:
             while self.running:
-                # Listen for wake word using Gemma 3n
+                # Listen for wake word using Whisper
                 if self.listen_for_wake_word():
                     print("[Gemma] Wake word detected!\n")
 
