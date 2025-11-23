@@ -83,26 +83,57 @@ class Gemma3nVoiceAssistant:
 
         try:
             # List available models
-            models = ollama.list()
-            model_names = [model['name'] for model in models.get('models', [])]
+            response = ollama.list()
+
+            # Check if Ollama is running and returned models
+            if not hasattr(response, 'models'):
+                print("[ERROR] Unexpected response from Ollama")
+                print("Please verify Ollama is running properly")
+                sys.exit(1)
+
+            # Extract model names from Model objects
+            # Each model has a .model attribute (not ['name'])
+            model_names = [model.model for model in response.models]
+
+            if not model_names:
+                print("[ERROR] No models found in Ollama")
+                print("\nPlease install a Gemma model:")
+                print("  ollama pull gemma3n:2b    # 2B parameter model")
+                print("  or")
+                print("  ollama pull gemma3n:4b    # 4B parameter model")
+                sys.exit(1)
 
             # Check for gemma3n variants
             gemma_models = [m for m in model_names if 'gemma' in m.lower() and '3' in m]
 
             if not gemma_models:
                 print("[ERROR] Gemma 3n not found in Ollama")
+                print(f"\nFound models: {', '.join(model_names)}")
                 print("\nPlease install Gemma 3n:")
-                print("  ollama pull gemma3n:2b-e2b    # 2B parameter model")
+                print("  ollama pull gemma3n:2b    # 2B parameter model")
                 print("  or")
-                print("  ollama pull gemma3n:4b-e4b    # 4B parameter model")
+                print("  ollama pull gemma3n:4b    # 4B parameter model")
                 sys.exit(1)
 
             # Use the first available Gemma 3n model
             self.gemma_model = gemma_models[0]
             print(f"[OK] Using model: {self.gemma_model}")
 
+        except AttributeError as e:
+            print(f"[ERROR] Failed to access Ollama model list: {e}")
+            print("\nMake sure you're using the latest Ollama Python client:")
+            print("  pip install --upgrade ollama")
+            sys.exit(1)
+        except ConnectionError as e:
+            print(f"[ERROR] Cannot connect to Ollama service: {e}")
+            print("\nMake sure Ollama is running:")
+            print("  1. Install Ollama from https://ollama.ai")
+            print("  2. Start Ollama service")
+            print("  3. Pull Gemma 3n: ollama pull gemma3n")
+            sys.exit(1)
         except Exception as e:
             print(f"[ERROR] Failed to connect to Ollama: {e}")
+            print(f"Error type: {type(e).__name__}")
             print("\nMake sure Ollama is running:")
             print("  1. Install Ollama from https://ollama.ai")
             print("  2. Start Ollama service")
