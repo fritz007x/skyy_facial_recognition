@@ -1,0 +1,33 @@
+# Gemma Facial Recognition Prototype - Dependencies
+# 
+# Note: This prototype is designed to work alongside the existing
+# skyy_facial_recognition project. Install in the same virtual environment
+# (facial_mcp_py311) to share dependencies.
+
+# Core dependencies (likely already installed from main project)
+# numpy==1.26.4  # Already installed for InsightFace
+# opencv-python>=4.8.0  # Already installed for webcam capture
+
+# MCP SDK for client connection (already installed)
+mcp>=1.0.0
+
+# Speech recognition
+SpeechRecognition>=3.10.0
+
+# Text-to-speech (local, no cloud required)
+pyttsx3>=2.90
+
+# Audio backend for speech recognition (Windows)
+pyaudio>=0.2.13
+
+# Ollama Python client for Gemma 3
+ollama>=0.4.0
+
+# JWT for OAuth token handling (already installed via oauth_config)
+# PyJWT>=2.8.0  # Already installed
+# cryptography>=41.0.0  # Already installed
+
+# Note: The following are already installed as part of the main project:
+# - insightface>=0.7.3 (for facial recognition - used by MCP server)
+# - chromadb (for vector database - used by MCP server)
+# - pydantic>=2.0.0 (for input validation - used by MCP server)

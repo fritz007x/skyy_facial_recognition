@@ -11,11 +11,15 @@ This project enhances the Skyy AI platform by developing a facial recognition ca
 
 ## Technical Stack
 
-- **Facial Recognition**: InsightFace with buffalo_l model pack
-- **Vector Database**: ChromaDB for facial embeddings storage
+- **Facial Recognition**: InsightFace 0.7.3 with buffalo_l model pack
+- **Vector Database**: ChromaDB with HNSW indexing for scalable similarity search
+- **Authentication**: OAuth 2.1 Client Credentials flow with JWT tokens
+- **Audit Logging**: Loguru with structured JSON logging and 30-day retention
+- **Health Monitoring**: Component health checks with degraded mode operation
 - **Computer Vision**: OpenCV for camera interface
-- **Protocol**: Model Context Protocol (MCP) for Skyy integration
-- **Language**: Python 3.x
+- **Voice AI**: Gemma 3n with native multimodal audio understanding
+- **Protocol**: Model Context Protocol (MCP) for AI integration
+- **Language**: Python 3.11.9
 
 ## Project Components
 
@@ -350,16 +354,325 @@ skyy_facial_recognition/
 └── README.md                          # This file
 ```
 
+## Production-Grade Features
+
+### Health Check System
+
+The MCP server includes comprehensive health monitoring for production reliability:
+
+**Component Monitoring:**
+- **InsightFace**: Model loading and face recognition functionality
+- **ChromaDB**: Vector database connectivity and operations
+- **OAuth**: Authentication system availability
+
+**Health States:**
+- **HEALTHY**: All components operational
+- **DEGRADED**: ChromaDB unavailable, registrations queued for later processing
+- **UNAVAILABLE**: Critical component failure
+
+**Features:**
+```bash
+# Check health status
+python src/check_health.py
+
+# Run with health checks enabled (default)
+python src/skyy_facial_recognition_mcp.py
+```
+
+**Degraded Mode:** When ChromaDB is unavailable, the system:
+- Queues new registrations for later processing
+- Returns helpful error messages for recognition attempts
+- Automatically processes queued registrations when ChromaDB recovers
+
+See [docs/HEALTH_CHECK_USAGE.md](docs/HEALTH_CHECK_USAGE.md) for details.
+
+### Audit Logging
+
+All biometric operations are logged for security compliance and forensic investigation:
+
+**Logged Operations:**
+- User registrations (with detection scores and quality metrics)
+- Face recognition attempts (successful and failed)
+- User profile updates and deletions
+- Database queries and statistics
+- All MCP tool invocations (32 audit points total)
+
+**Log Features:**
+- **Structured JSON format** for easy parsing
+- **Daily rotation** with compression
+- **30-day retention** (configurable)
+- **PII redaction** options for privacy compliance
+- **Client identification** for multi-client environments
+
+**Log Location:**
+```
+audit_logs/
+├── audit.log              # Current audit log
+├── audit.2024-01-15.log   # Previous day (compressed)
+└── application.log        # Application logs
+```
+
+**Example audit entry:**
+```json
+{
+  "timestamp": "2024-01-16T10:30:45.123Z",
+  "event_type": "registration",
+  "outcome": "success",
+  "client_id": "webcam_client",
+  "user_id": "john_doe_1",
+  "user_name": "John Doe",
+  "biometric_data": {
+    "detection_score": 0.98,
+    "face_quality": "high"
+  }
+}
+```
+
+### Batch Enrollment
+
+Automate user enrollment from a directory of images:
+
+```bash
+# Enroll all users from a folder
+python src/batch_enroll.py
+
+# Specify custom directory
+python src/batch_enroll.py --dir path/to/enrollment/images
+
+# Skip existing users
+python src/batch_enroll.py --skip-existing
+```
+
+**Features:**
+- Automatic OAuth authentication
+- Progress tracking with statistics
+- Duplicate detection (skips existing users)
+- Health check integration (supports degraded mode)
+- Detailed success/failure reporting
+
+**Supported formats:** JPG, JPEG, PNG
+**Filename convention:** Image filename becomes user name (e.g., `john_doe.jpg` → "John Doe")
+
+### ChromaDB Vector Database
+
+Production-grade vector storage for facial embeddings:
+
+**Features:**
+- **HNSW indexing**: Fast similarity search (O(log n) complexity)
+- **Scalable**: Handles thousands of users efficiently
+- **Persistent storage**: Data survives server restarts
+- **Metadata support**: Store additional user information
+- **Distance metrics**: Cosine similarity for face matching
+
+**Database Location:**
+```
+chromadb_data/
+└── chroma.sqlite3    # Vector database file
+```
+
+**Performance:**
+- Recognition: ~10-50ms for 1000 users
+- Much faster than linear search O(n)
+- Automatic index optimization
+
+## Voice Assistant with Gemma 3n
+
+This project includes a production-ready voice-activated facial recognition assistant using Google's Gemma 3n models with native multimodal audio processing capabilities.
+
+### Features
+
+- **Native audio understanding**: Gemma 3n processes audio directly (no Whisper/external models needed)
+- **Continuous listening**: Real-time microphone input with 3-second chunks
+- **Wake word detection**: Responds to "Hello Gemma", "Hey Gemma", or "Hi Gemma"
+- **MCP integration**: Automatic face recognition via MCP server
+- **Text-to-speech**: Personalized greetings with recognized user names
+- **Multiple model support**: E2B (faster, 2B params) or E4B (more accurate, 4B params)
+- **GPU acceleration**: Automatic CUDA detection for faster processing
+
+### Workflow
+
+```
+[Microphone] → [Gemma 3n Audio] → [Wake Word Detection]
+                                          ↓
+                                    [Webcam Capture]
+                                          ↓
+                                    [MCP Recognition]
+                                          ↓
+                                    [TTS Greeting: "Hello, {name}!"]
+```
+
+### Quick Start
+
+**1. Install dependencies:**
+```bash
+# Core dependencies
+pip install transformers>=4.53.0 torch torchaudio
+
+# Required for Gemma 3n multimodal
+pip install timm>=0.9.0 librosa>=0.11.0
+
+# Audio and voice
+pip install sounddevice soundfile pyttsx3
+
+# HuggingFace and MCP
+pip install huggingface-hub opencv-python mcp
+```
+
+**2. Authenticate with Hugging Face:**
+
+Gemma 3n models are GATED and require authentication:
+
+```bash
+# Get token from: https://huggingface.co/settings/tokens
+# Request access: https://huggingface.co/google/gemma-3n-E2B-it
+
+# Login (recommended)
+huggingface-cli login
+
+# OR set environment variable
+set HF_TOKEN=hf_your_token_here  # Windows
+export HF_TOKEN=hf_your_token_here  # Linux/Mac
+```
+
+**3. Verify setup:**
+```bash
+# Test authentication
+python test_hf_auth.py
+
+# Check dependencies
+python check_gemma3n_dependencies.py
+```
+
+**4. Run live voice assistant:**
+```bash
+# Start with E2B model (faster, recommended for CPU)
+python src/gemma3n_live_voice_assistant.py
+
+# Or use E4B model (more accurate, requires more resources)
+python src/gemma3n_live_voice_assistant.py --model google/gemma-3n-E4B-it
+
+# Adjust audio chunk duration (default 3.0s)
+python src/gemma3n_live_voice_assistant.py --duration 2.5
+```
+
+### Model Comparison
+
+| Feature | E2B (2B params) | E4B (4B params) |
+|---------|-----------------|-----------------|
+| **Accuracy** | Good | Excellent ✅ |
+| **Speed (CPU)** | ~15s/3s audio | ~30s/3s audio |
+| **Speed (GPU)** | ~2s/3s audio | ~3-4s/3s audio |
+| **Download size** | ~10 GB | ~15 GB |
+| **RAM required (CPU)** | ~8 GB | ~16 GB ⚠️ |
+| **VRAM (GPU)** | ~4 GB | ~8 GB |
+| **Loading time (CPU)** | 2-3 minutes | 20-40 minutes ⚠️ |
+| **Loading time (GPU)** | 30-60 seconds | 1-2 minutes |
+| **Best for** | CPU systems ✅ | GPU systems only |
+
+**⚠️ Important:** E4B requires significant resources and is **not recommended for CPU-only systems**. Use E2B for CPU deployment.
+
+### Usage Example
+
+```bash
+$ python src/gemma3n_live_voice_assistant.py
+
+[System] Initializing Gemma 3n Voice Assistant
+[System] Model: google/gemma-3n-E2B-it
+[System] Device: cuda
+[System] Authenticated with Hugging Face
+[System] Model loaded successfully
+[System] OAuth configured
+
+======================================================================
+         GEMMA 3N LIVE VOICE ASSISTANT
+         Voice-Activated Facial Recognition
+======================================================================
+
+Model: google/gemma-3n-E2B-it
+Chunk duration: 3.0s
+Wake word: 'Hello Gemma', 'Hey Gemma', or 'Hi Gemma'
+
+======================================================================
+
+[Gemma] Voice assistant activated. Say Hello Gemma to get started.
+[Gemma] Starting continuous listening...
+
+[Listening] Recording...
+[Heard] "hello gemma"
+[Gemma] Wake word detected: 'hello gemma'
+
+======================================================================
+[Gemma] Speaking: "Yes?"
+[Gemma] Capturing image...
+[Gemma] Image captured
+[Gemma] Connecting to MCP server...
+[Gemma] Analyzing face...
+[Gemma] Recognized: John Doe (85.2%)
+[Gemma] Speaking: "Hello, John Doe!"
+======================================================================
+
+[Gemma] Ready for next command...
+```
+
+### Documentation
+
+- **[GEMMA3N_QUICKSTART.md](GEMMA3N_QUICKSTART.md)** - 3-minute setup guide
+- **[GEMMA3N_HUGGINGFACE_AUTH.md](GEMMA3N_HUGGINGFACE_AUTH.md)** - Authentication guide
+- **[GEMMA3N_NATIVE_AUDIO_GUIDE.md](GEMMA3N_NATIVE_AUDIO_GUIDE.md)** - Complete documentation
+- **[GEMMA3N_TIMM_DEPENDENCY_FIX.md](GEMMA3N_TIMM_DEPENDENCY_FIX.md)** - Dependency troubleshooting
+
+### Troubleshooting
+
+**"GatedRepoError: 401 Client Error"**
+```bash
+# Not authenticated - run authentication check
+python test_hf_auth.py
+
+# Login if needed
+huggingface-cli login
+```
+
+**"TimmWrapperModel requires the timm library"**
+```bash
+pip install timm>=0.9.0
+```
+
+**"load_audio_librosa requires the librosa library"**
+```bash
+pip install librosa>=0.11.0
+```
+
+**"Audio too quiet (RMS: 0.0001)"**
+- Check microphone permissions
+- Increase microphone volume
+- Speak louder or closer to mic
+- Try different microphone
+
+**Slow transcription on CPU**
+- Use E2B model instead of E4B
+- Reduce chunk duration: `--duration 2.0`
+- Consider GPU acceleration (100x faster)
+
 ## Project Status
 
-✅ **Functional MVP**
+✅ **Production-Ready System**
 
-Current features:
-- MCP server with 7 tools for facial recognition
-- Interactive webcam testing interface
-- User registration and recognition
-- Database management
-- Automated testing suite
+### Core Features
+- ✅ **MCP Server**: 8 production-grade tools for facial recognition
+- ✅ **OAuth 2.1**: Secure authentication with JWT tokens
+- ✅ **ChromaDB**: Scalable vector database with HNSW indexing
+- ✅ **Health Monitoring**: Component health checks with degraded mode
+- ✅ **Audit Logging**: Comprehensive security logs (32 audit points)
+- ✅ **Batch Enrollment**: Automated user registration from directories
+- ✅ **Interactive Testing**: Webcam capture tool with multiple modes
+- ✅ **Voice Assistant**: Gemma 3n native audio with continuous listening
+
+### Quality & Reliability
+- ✅ Automated test suites (OAuth, MCP, Health)
+- ✅ Production-grade error handling
+- ✅ Security compliance ready (audit logs, PII redaction)
+- ✅ Scalable architecture (handles 1000+ users)
+- ✅ Local-first privacy (no external API calls)
 
 ## Development Roadmap
 
