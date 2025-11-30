@@ -1,21 +1,30 @@
 """
-Gemma Facial Recognition - Modules Package
+Gemma Facial Recognition - Modules Package (Refactored Architecture)
 
 Contains the core modules for the voice-activated facial recognition system:
-- speech: Voice recognition and text-to-speech
+
+Refactored Components:
+- speech_orchestrator: Facade coordinating all speech components
+- audio_input_device: Microphone recording with cleanup
+- transcription_engine: Vosk-based STT with grammar support
+- text_to_speech_engine: pyttsx3 wrapper
+- wake_word_detector: Wake word validation
+- silence_detector: Energy-based silence detection
+- mcp_sync_facade: Synchronous MCP client wrapper
+
+Shared Components:
 - vision: Webcam capture utilities
-- mcp_client: MCP client wrapper for Skyy Facial Recognition server
 - permission: User permission handling
 """
 
-from .speech import SpeechManager
+from .speech_orchestrator import SpeechOrchestrator
+from .mcp_sync_facade import SyncMCPFacade
 from .vision import WebcamManager
-from .mcp_client import SkyyMCPClient
 from .permission import PermissionManager
 
 __all__ = [
-    'SpeechManager',
-    'WebcamManager', 
-    'SkyyMCPClient',
+    'SpeechOrchestrator',
+    'SyncMCPFacade',
+    'WebcamManager',
     'PermissionManager'
 ]
