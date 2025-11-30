@@ -1,6 +1,11 @@
 """
-Gemma 3 Facial Recognition Prototype
-Main orchestration script.
+Gemma 3 Facial Recognition Prototype - REFACTORED VERSION
+Main orchestration script using clean architecture.
+
+IMPROVEMENTS APPLIED:
+1. SyncMCPFacade - Clean synchronous interface over async MCP client
+2. SpeechOrchestrator - Component-based speech architecture
+3. AudioDeviceManager - Explicit resource lifecycle management
 
 Voice-activated facial recognition using:
 - Gemma 3 (via Ollama) as the orchestrating LLM
@@ -8,11 +13,9 @@ Voice-activated facial recognition using:
 - Speech recognition for wake word detection
 - Webcam capture for face images
 
-This script is designed to work with the existing skyy_facial_recognition_mcp.py server
-which uses OAuth 2.1 authentication and Pydantic input models.
+FULLY SYNCHRONOUS - Clean architecture with no async leaks.
 """
 
-import asyncio
 import re
 import sys
 import time
@@ -25,10 +28,10 @@ sys.path.insert(0, str(Path(__file__).parent))
 # Add src directory for oauth_config (located in parent/src/)
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-# Local modules
-from modules.speech import SpeechManager
+# Local modules - NEW REFACTORED ARCHITECTURE
+from modules.speech_orchestrator import SpeechOrchestrator as SpeechManager
+from modules.mcp_sync_facade import SyncMCPFacade
 from modules.vision import WebcamManager
-from modules.mcp_client import SkyyMCPClient
 from modules.permission import PermissionManager
 from config import (
     WAKE_WORD,
@@ -42,7 +45,8 @@ from config import (
     SPEECH_RATE,
     SPEECH_VOLUME,
     SIMILARITY_THRESHOLD,
-    OLLAMA_MODEL
+    OLLAMA_MODEL,
+    ENERGY_THRESHOLD
 )
 
 # OAuth configuration - uses the same oauth_config as MCP server
@@ -52,164 +56,168 @@ from oauth_config import oauth_config
 try:
     import ollama
 except ImportError:
-    print("ERROR: ollama package not installed. Run: pip install ollama")
+    print("ERROR: ollama package not installed. Run: pip install ollama", flush=True)
     sys.exit(1)
 
 
 class GemmaFacialRecognition:
     """
     Main application class orchestrating voice-activated facial recognition.
-    
-    Integrates with the existing Skyy Facial Recognition MCP server using
-    OAuth 2.1 authentication.
+
+    REFACTORED ARCHITECTURE:
+    - Uses SyncMCPFacade instead of _run_async() hack
+    - Uses SpeechOrchestrator with component-based design
+    - Maintains clean separation of concerns
+    - 100% synchronous - no async leaks
+
+    FULLY SYNCHRONOUS - matches skyy_compliment architecture.
     """
-    
+
     def __init__(self):
         self.speech: Optional[SpeechManager] = None
         self.camera: Optional[WebcamManager] = None
-        self.mcp_client: Optional[SkyyMCPClient] = None
+        self.mcp: Optional[SyncMCPFacade] = None  # NEW: Clean synchronous facade
         self.permission: Optional[PermissionManager] = None
         self.access_token: Optional[str] = None
-        self._running = False
-    
+        self.token_created_time: float = 0
+
     def setup_oauth(self) -> str:
         """
         Setup OAuth client and generate access token.
-        
-        Uses the same OAuth configuration as the MCP server to ensure
-        compatibility with the authentication system.
-        
+
         Returns:
             Access token string
         """
         client_id = "gemma_facial_client"
-        
+
         # Check if client already exists, if not create it
         clients = oauth_config.load_clients()
         if client_id not in clients:
-            print(f"[OAuth] Creating new client: {client_id}")
+            print(f"[OAuth] Creating new client: {client_id}", flush=True)
             oauth_config.create_client(
                 client_id=client_id,
                 client_name="Gemma Facial Recognition Client"
             )
         else:
-            print(f"[OAuth] Using existing client: {client_id}")
-        
+            print(f"[OAuth] Using existing client: {client_id}", flush=True)
+
         # Generate access token
         access_token = oauth_config.create_access_token(client_id)
-        print(f"[OAuth] Access token generated (expires in {oauth_config.ACCESS_TOKEN_EXPIRE_MINUTES} minutes)")
-        
+        print(f"[OAuth] Access token generated (expires in {oauth_config.ACCESS_TOKEN_EXPIRE_MINUTES} minutes)", flush=True)
+
         return access_token
-    
-    async def initialize(self) -> bool:
+
+    def initialize(self) -> bool:
         """
-        Initialize all components.
-        
+        Initialize all components - SYNCHRONOUS with clean architecture.
+
         Returns:
             True if all components initialized successfully
         """
-        print("=" * 60)
-        print("  GEMMA FACIAL RECOGNITION PROTOTYPE")
-        print("=" * 60)
-        
+        print("=" * 60, flush=True)
+        print("  GEMMA FACIAL RECOGNITION PROTOTYPE (REFACTORED)", flush=True)
+        print("=" * 60, flush=True)
+
         # 1. Setup OAuth authentication
-        print("\n[Init] Setting up OAuth authentication...")
+        print("\n[Init] Setting up OAuth authentication...", flush=True)
         try:
             self.access_token = self.setup_oauth()
+            self.token_created_time = time.time()
         except Exception as e:
-            print(f"[Init] ERROR: OAuth setup failed: {e}")
+            print(f"[Init] ERROR: OAuth setup failed: {e}", flush=True)
             return False
-        
-        # 2. Initialize speech
-        print("\n[Init] Setting up speech recognition...")
+
+        # 2. Initialize speech (NEW: Component-based architecture)
+        print("\n[Init] Setting up speech recognition (component-based)...", flush=True)
         self.speech = SpeechManager(rate=SPEECH_RATE, volume=SPEECH_VOLUME)
-        
-        # 3. Initialize camera
-        print("\n[Init] Setting up webcam...")
+
+        # 3. Create camera manager (but don't initialize yet - wait for permission)
+        print("\n[Init] Creating webcam manager...", flush=True)
         self.camera = WebcamManager(
             camera_index=CAMERA_INDEX,
             width=CAPTURE_WIDTH,
             height=CAPTURE_HEIGHT,
             warmup_frames=WARMUP_FRAMES
         )
-        if not self.camera.initialize():
-            print("[Init] ERROR: Camera initialization failed")
-            return False
-        
-        # 4. Initialize MCP client
-        print("\n[Init] Connecting to MCP server...")
-        self.mcp_client = SkyyMCPClient(
+        print("[Init] Camera will be initialized after permission is granted.", flush=True)
+
+        # 4. Initialize MCP client (NEW: Clean synchronous facade)
+        print("\n[Init] Connecting to MCP server (using SyncMCPFacade)...", flush=True)
+        self.mcp = SyncMCPFacade(
             python_path=MCP_PYTHON_PATH,
             server_script=MCP_SERVER_SCRIPT
         )
-        if not await self.mcp_client.connect():
-            print("[Init] ERROR: MCP connection failed")
+        if not self.mcp.connect():  # NO await! Clean synchronous call
+            print("[Init] ERROR: MCP connection failed", flush=True)
             return False
-        
+
         # 5. Initialize permission manager
         self.permission = PermissionManager(self.speech)
-        
-        # 6. Check server health status
-        print("\n[Init] Checking server health...")
-        health = await self.mcp_client.get_health_status(self.access_token)
+
+        # 6. Check server health status (NEW: Synchronous call)
+        print("\n[Init] Checking server health...", flush=True)
+        health = self.mcp.get_health_status(self.access_token)  # NO await!
         if health:
             overall = health.get('overall_status', 'unknown')
-            print(f"[Init] Server status: {overall.upper()}")
-            
+            print(f"[Init] Server status: {overall.upper()}", flush=True)
+
             if health.get('degraded_mode', {}).get('active'):
-                print("[Init] WARNING: Server is in degraded mode")
-        
+                print("[Init] WARNING: Server is in degraded mode", flush=True)
+
         # 7. Verify Ollama/Gemma is available
-        print(f"\n[Init] Checking Ollama model ({OLLAMA_MODEL})...")
+        print(f"\n[Init] Checking Ollama model ({OLLAMA_MODEL})...", flush=True)
         try:
             ollama.chat(
                 model=OLLAMA_MODEL,
                 messages=[{"role": "user", "content": "Say 'ready'"}],
                 options={"num_predict": 10}
             )
-            print(f"[Init] Gemma 3 ({OLLAMA_MODEL}) is ready.")
+            print(f"[Init] Gemma 3 ({OLLAMA_MODEL}) is ready.", flush=True)
         except Exception as e:
-            print(f"[Init] WARNING: Ollama check failed: {e}")
-            print("[Init] Make sure Ollama is running and model is pulled.")
-        
-        print("\n[Init] All systems initialized!")
+            print(f"[Init] WARNING: Ollama check failed: {e}", flush=True)
+            print("[Init] Make sure Ollama is running and model is pulled.", flush=True)
+
+        print("\n[Init] All systems initialized!", flush=True)
+        print("[Init] Architecture: Component-based with SyncMCPFacade", flush=True)
         return True
-    
-    async def cleanup(self) -> None:
-        """Release all resources."""
-        print("\n[Cleanup] Shutting down...")
-        
-        if self.camera:
+
+    def cleanup(self) -> None:
+        """Release all resources - SYNCHRONOUS with clean architecture."""
+        print("\n[Cleanup] Shutting down...", flush=True)
+
+        # Release speech resources (NEW: Component cleanup)
+        if self.speech:
+            self.speech.cleanup()
+
+        if self.camera and hasattr(self.camera, 'cap') and self.camera.cap is not None:
             self.camera.release()
-        
-        if self.mcp_client:
-            await self.mcp_client.disconnect()
-        
-        print("[Cleanup] Done.")
-    
+
+        # NEW: Clean synchronous disconnect (no _run_async needed!)
+        if self.mcp:
+            self.mcp.disconnect()  # NO await! Clean synchronous call
+
+        print("[Cleanup] Done.", flush=True)
+
     def generate_greeting(self, recognition_result: dict) -> str:
         """
         Use Gemma 3 to generate a personalized greeting.
-        
+
         Args:
             recognition_result: Result from skyy_recognize_face
-            
+
         Returns:
             Generated greeting text
         """
         status = recognition_result.get("status", "error")
-        
+
         if status == "recognized":
             user = recognition_result.get("user", {})
             name = user.get("name", "friend")
             distance = recognition_result.get("distance", 0)
-            # Convert cosine distance to similarity percentage
-            # Cosine distance range: [0, 2] where 0=identical, 2=opposite
-            # Convert to 0-100% scale: 0 distance = 100%, 2 distance = 0%
             similarity = max(0, min(100, (1 - distance / 2) * 100))
             metadata = user.get("metadata", {})
-            
-            prompt = f"""You are Gemma, a friendly AI assistant at Miami Dade College. 
+
+            prompt = f"""You are Gemma, a friendly AI assistant at Miami Dade College.
 Generate a warm, personalized greeting for {name} who you just recognized.
 
 Recognition confidence: {similarity:.0f}%
@@ -218,24 +226,24 @@ User metadata: {metadata}
 Keep the greeting brief (1-2 sentences), natural, and friendly.
 Don't mention technical details like confidence scores or distances.
 If there's relevant metadata (like department or role), you can mention it naturally."""
-            
+
         elif status == "low_confidence":
             user = recognition_result.get("user", {})
             possible_name = user.get("name", "")
-            
-            prompt = f"""You are Gemma, a friendly AI assistant. Generate a polite greeting 
+
+            prompt = f"""You are Gemma, a friendly AI assistant. Generate a polite greeting
 for someone you're not quite sure about. You think they might be {possible_name}, but you're not certain.
 
 Keep it brief (1-2 sentences), friendly, and gently ask if you got their name right.
 Don't be technical or mention confidence scores."""
-            
+
         else:  # not_recognized or error
-            prompt = """You are Gemma, a friendly AI assistant at Miami Dade College. 
+            prompt = """You are Gemma, a friendly AI assistant at Miami Dade College.
 Generate a polite greeting for someone you don't recognize yet.
 
-Keep it brief (1-2 sentences), welcoming, and offer to help them register 
+Keep it brief (1-2 sentences), welcoming, and offer to help them register
 so you can remember them next time. Don't be robotic."""
-        
+
         try:
             response = ollama.chat(
                 model=OLLAMA_MODEL,
@@ -244,49 +252,65 @@ so you can remember them next time. Don't be robotic."""
             )
             return response['message']['content'].strip()
         except Exception as e:
-            print(f"[Gemma] Error generating greeting: {e}")
+            print(f"[Gemma] Error generating greeting: {e}", flush=True)
             # Fallback greeting
             if status == "recognized":
                 return f"Hello, {recognition_result.get('user', {}).get('name', 'there')}! Nice to see you."
             return "Hello! I don't think we've met. Would you like me to remember you?"
-    
+
     def handle_recognition(self) -> None:
         """
-        Handle the full recognition flow after wake word detection.
+        Handle the full recognition flow after wake word detection - SYNCHRONOUS.
         """
         # 1. Request camera permission
         if not self.permission.request_camera_permission():
             return
-        
-        # 2. Capture image
-        asyncio.sleep(1)  # Give user time to position
+
+        # 2. Initialize camera if not already initialized (first time permission granted)
+        if not hasattr(self.camera, 'cap') or self.camera.cap is None:
+            print("[Recognition] Initializing camera (first time permission granted)...", flush=True)
+            if not self.camera.initialize():
+                self.speech.speak("Sorry, I couldn't access the camera. Please try again.")
+                return
+
+        # 3. Capture image
+        time.sleep(1)  # Give user time to position
         success, image_base64 = self.camera.capture_to_base64()
-        
+
         if not success:
             self.speech.speak("Sorry, I couldn't capture an image. Please try again.")
+            # Release camera on error
+            if hasattr(self.camera, 'cap') and self.camera.cap is not None:
+                self.camera.release()
             return
-        
-        # 3. Call MCP tool for recognition
+
+        # 4. Call MCP tool for recognition (NEW: Clean synchronous call)
         self.speech.speak("Let me take a look...")
-        result = self.mcp_client.recognize_face(
+        result = self.mcp.recognize_face(  # NO await! Clean synchronous call
             access_token=self.access_token,
             image_data=image_base64,
             confidence_threshold=SIMILARITY_THRESHOLD
         )
-        
-        print(f"[Recognition] Result: {result}")
-        
-        # 4. Generate and speak greeting
+
+        print(f"[Recognition] Result: {result}", flush=True)
+
+        # 5. Generate and speak greeting
         greeting = self.generate_greeting(result)
         self.speech.speak(greeting)
-        
-        # 5. If not recognized, offer registration
+
+        # 6. Release camera after recognition (privacy & resource management)
+        if hasattr(self.camera, 'cap') and self.camera.cap is not None:
+            print("[Recognition] Releasing camera...", flush=True)
+            self.camera.release()
+            print("[Recognition] Camera released.", flush=True)
+
+        # 7. If not recognized, offer registration
         if result.get("status") == "not_recognized":
             self.handle_registration_offer()
-    
-    async def handle_registration_offer(self) -> None:
+
+    def handle_registration_offer(self) -> None:
         """
-        Handle the registration flow for unrecognized users.
+        Handle the registration flow for unrecognized users - SYNCHRONOUS.
         """
         self.speech.speak("What's your name?")
         name = self.speech.listen_for_response(timeout=10.0)
@@ -307,39 +331,47 @@ so you can remember them next time. Don't be robotic."""
             self.speech.speak("That name is too long. Please use a shorter name.")
             return
 
-        # Check for valid characters (letters, spaces, hyphens, apostrophes, periods)
+        # Check for valid characters
         if not re.match(r'^[a-zA-Z\s\-\.\']+$', name):
             self.speech.speak("Please use only letters and common punctuation in your name.")
             return
-        
+
         # Confirm registration
         if not self.permission.request_registration_permission(name):
             return
-        
+
+        # Ensure camera is initialized (should already be from previous permission)
+        if not hasattr(self.camera, 'cap') or self.camera.cap is None:
+            print("[Registration] Camera not initialized. Initializing now...", flush=True)
+            if not self.camera.initialize():
+                self.speech.speak("Sorry, I couldn't access the camera. Please try again.")
+                return
+
         # Capture image for registration
         self.speech.speak("Great! Look at the camera one more time.")
-        await asyncio.sleep(1)
+        time.sleep(1)
         success, image_base64 = self.camera.capture_to_base64()
-        
+
         if not success:
             self.speech.speak("Sorry, the camera isn't working. Please try again later.")
+            # Release camera on error
+            if hasattr(self.camera, 'cap') and self.camera.cap is not None:
+                self.camera.release()
             return
-        
-        # Register via MCP
-        result = await self.mcp_client.register_user(
+
+        # Register via MCP (NEW: Clean synchronous call)
+        result = self.mcp.register_user(  # NO await! Clean synchronous call
             access_token=self.access_token,
             name=name,
             image_data=image_base64,
             metadata={"registered_via": "gemma_voice"}
         )
-        
+
         status = result.get("status", "error")
-        
+
         if status == "success":
             self.speech.speak(f"Perfect! I'll remember you now, {name}. Nice to meet you!")
         elif status == "queued":
-            # Handle degraded mode
-            queue_pos = result.get("user", {}).get("queue_position", "")
             self.speech.speak(f"I've saved your information, {name}. The system is a bit busy, but I'll remember you soon!")
         else:
             error_msg = result.get("message", "Unknown error")
@@ -347,69 +379,75 @@ so you can remember them next time. Don't be robotic."""
                 self.speech.speak("I couldn't see your face clearly. Please make sure you're well-lit and facing the camera.")
             else:
                 self.speech.speak(f"Sorry, something went wrong. Please try again later.")
-    
+
+        # Release camera after registration (privacy & resource management)
+        if hasattr(self.camera, 'cap') and self.camera.cap is not None:
+            print("[Registration] Releasing camera...", flush=True)
+            self.camera.release()
+            print("[Registration] Camera released.", flush=True)
+
+    def refresh_token_if_needed(self) -> None:
+        """Check and refresh OAuth token if needed."""
+        elapsed_minutes = (time.time() - self.token_created_time) / 60
+        token_expire_minutes = oauth_config.ACCESS_TOKEN_EXPIRE_MINUTES
+
+        if elapsed_minutes > (token_expire_minutes - 5):
+            print("[OAuth] Refreshing access token...", flush=True)
+            self.access_token = self.setup_oauth()
+            self.token_created_time = time.time()
+            print(f"[OAuth] Token refreshed (valid for {token_expire_minutes} minutes)", flush=True)
+
     def run(self) -> None:
         """
-        Main run loop - listen for wake word and handle interactions.
+        Main run loop - SYNCHRONOUS (matches skyy_compliment).
         """
-        self._running = True
-        token_created_time = time.time()
-
         wake_words = [WAKE_WORD] + WAKE_WORD_ALTERNATIVES
 
-        print("\n" + "=" * 60)
-        print(f"  Listening for: {wake_words}")
-        print("  Press Ctrl+C to exit")
-        print("=" * 60 + "\n")
+        print("\n" + "=" * 60, flush=True)
+        print(f"  Listening for: {wake_words}", flush=True)
+        print("  Press Ctrl+C to exit", flush=True)
+        print("=" * 60 + "\n", flush=True)
 
-        self.speech.speak("Hello! I'm Gemma. Say 'Hello Gemma' when you're ready.")
+        # Start listening immediately - no initial greeting
+        print("[Main] Ready. Listening for wake word...\n", flush=True)
 
-        while self._running:
+        while True:
             try:
-                # Check if OAuth token needs refresh (5 minutes before expiry)
-                elapsed_minutes = (time.time() - token_created_time) / 60
-                token_expire_minutes = oauth_config.ACCESS_TOKEN_EXPIRE_MINUTES
+                # Check if OAuth token needs refresh
+                self.refresh_token_if_needed()
 
-                if elapsed_minutes > (token_expire_minutes - 5):
-                    print("[OAuth] Refreshing access token...")
-                    self.access_token = self.setup_oauth()
-                    token_created_time = time.time()
-                    print(f"[OAuth] Token refreshed (valid for {token_expire_minutes} minutes)")
-
-                # Listen for wake word
+                # Listen for wake word (using component-based speech)
                 detected, transcription = self.speech.listen_for_wake_word(
                     wake_words,
-                    timeout=None  # Listen indefinitely
+                    timeout=None,  # Listen indefinitely
+                    energy_threshold=ENERGY_THRESHOLD
                 )
 
                 if detected:
-                    print(f"\n[Wake] Detected wake word in: '{transcription}'")
+                    print(f"\n[Wake] Detected wake word in: '{transcription}'", flush=True)
 
-                    # TEST: Speak immediately after wake word detection
-                    self.speech.speak("Wake word detected! Testing speech output before permission request.")
-
+                    # Handle recognition flow
                     self.handle_recognition()
-                    print("\n[Main] Returning to listening mode...\n")
+                    print("\n[Main] Returning to listening mode...\n", flush=True)
 
             except KeyboardInterrupt:
-                print("\n[Main] Interrupt received, shutting down...")
-                self._running = False
+                print("\n[Main] Interrupt received, shutting down...", flush=True)
                 break
             except Exception as e:
-                print(f"[Main] Error: {e}")
-                #await asyncio.sleep(1)  # Brief pause before retry
+                print(f"[Main] Error: {e}", flush=True)
+                time.sleep(1)  # Brief pause before retry
 
 
 def main():
-    """Entry point."""
+    """Entry point - SYNCHRONOUS with clean architecture."""
     app = GemmaFacialRecognition()
-    
+
     try:
         if app.initialize():
-          app.run() 
+            app.run()
     finally:
-          app.cleanup()
+        app.cleanup()
 
 
 if __name__ == "__main__":
-    run(main())
+    main()
