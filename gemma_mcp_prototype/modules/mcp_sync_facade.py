@@ -8,6 +8,7 @@ Follows the Facade and Adapter patterns from Clean Architecture.
 """
 
 import asyncio
+import time
 from pathlib import Path
 from typing import Optional, Any, Dict
 
@@ -60,6 +61,10 @@ class SyncMCPFacade:
         # Connection state
         self._connected = False
 
+        # Event loop health tracking
+        self._last_health_check = 0.0
+        self._health_check_interval = 60.0  # Check every 60 seconds
+
     def _ensure_event_loop(self) -> asyncio.AbstractEventLoop:
         """
         Ensure a persistent event loop exists.
@@ -72,20 +77,85 @@ class SyncMCPFacade:
             asyncio.set_event_loop(self._event_loop)
         return self._event_loop
 
-    def _run_async(self, coro):
+    def _ensure_event_loop_health(self) -> bool:
         """
-        Execute an async coroutine synchronously using the persistent event loop.
+        Verify event loop is healthy and responsive.
+
+        Checks for:
+        - Event loop exists and is not closed
+        - Excessive pending tasks (potential memory leak)
+        - Cleans up completed tasks
+
+        Returns:
+            True if event loop is healthy, False otherwise
+        """
+        if self._event_loop is None or self._event_loop.is_closed():
+            print("[SyncMCPFacade] Event loop is closed or missing", flush=True)
+            return False
+
+        current_time = time.time()
+        if current_time - self._last_health_check > self._health_check_interval:
+            # Check for excessive pending tasks
+            try:
+                pending = asyncio.all_tasks(self._event_loop)
+                pending_count = len(pending)
+
+                if pending_count > 10:  # Threshold for unhealthy state
+                    print(f"[SyncMCPFacade] WARNING: {pending_count} pending tasks in event loop", flush=True)
+
+                # Clean up completed tasks to prevent accumulation
+                completed_count = 0
+                for task in pending:
+                    if task.done():
+                        try:
+                            task.result()  # Retrieve exception if any
+                            completed_count += 1
+                        except Exception as e:
+                            print(f"[SyncMCPFacade] Cleaned up task error: {e}", flush=True)
+
+                if completed_count > 0:
+                    print(f"[SyncMCPFacade] Cleaned up {completed_count} completed tasks", flush=True)
+
+                self._last_health_check = current_time
+
+            except Exception as e:
+                print(f"[SyncMCPFacade] Event loop health check failed: {e}", flush=True)
+                return False
+
+        return True
+
+    def _run_async(self, coro, timeout: float = 30.0):
+        """
+        Execute an async coroutine synchronously with timeout protection.
 
         This is the only place where async/await complexity is handled.
+        Includes health checking and timeout protection to prevent indefinite blocks.
 
         Args:
             coro: Async coroutine to execute
+            timeout: Maximum time in seconds to wait (default 30.0)
 
         Returns:
             Result of the coroutine
+
+        Raises:
+            RuntimeError: If event loop is unhealthy or operation times out
         """
         loop = self._ensure_event_loop()
-        return loop.run_until_complete(coro)
+
+        # Health check before execution
+        if not self._ensure_event_loop_health():
+            raise RuntimeError("Event loop in unhealthy state")
+
+        # Add timeout protection
+        try:
+            async def run_with_timeout():
+                return await asyncio.wait_for(coro, timeout=timeout)
+
+            return loop.run_until_complete(run_with_timeout())
+        except asyncio.TimeoutError:
+            print(f"[SyncMCPFacade] Operation timed out after {timeout}s", flush=True)
+            raise RuntimeError(f"MCP operation timed out after {timeout}s")
 
     def connect(self) -> bool:
         """

@@ -386,16 +386,66 @@ so you can remember them next time. Don't be robotic."""
             self.camera.release()
             print("[Registration] Camera released.", flush=True)
 
+    def validate_token(self) -> bool:
+        """
+        Validate that current token is still valid by testing it with a quick MCP call.
+
+        This protects against:
+        - System clock changes
+        - Process suspension/resume
+        - Token revocation
+        - Server restarts
+
+        Returns:
+            True if token is valid, False otherwise
+        """
+        if not self.access_token:
+            return False
+
+        try:
+            # Quick health check also validates token
+            # This is a lightweight operation that doesn't require face processing
+            health = self.mcp.get_health_status(self.access_token)
+            is_valid = health is not None and 'overall_status' in health
+
+            if not is_valid:
+                print("[OAuth] Token validation failed: invalid health response", flush=True)
+
+            return is_valid
+        except Exception as e:
+            print(f"[OAuth] Token validation failed: {e}", flush=True)
+            return False
+
     def refresh_token_if_needed(self) -> None:
-        """Check and refresh OAuth token if needed."""
+        """
+        Check and refresh OAuth token if needed.
+
+        Implements two-tier validation:
+        1. Time-based: Proactively refresh 5 minutes before expiry
+        2. Functional: Validate token actually works after idle periods
+        """
         elapsed_minutes = (time.time() - self.token_created_time) / 60
         token_expire_minutes = oauth_config.ACCESS_TOKEN_EXPIRE_MINUTES
 
-        if elapsed_minutes > (token_expire_minutes - 5):
-            print("[OAuth] Refreshing access token...", flush=True)
-            self.access_token = self.setup_oauth()
-            self.token_created_time = time.time()
-            print(f"[OAuth] Token refreshed (valid for {token_expire_minutes} minutes)", flush=True)
+        # Tier 1: Proactive refresh 5 minutes before expiry
+        needs_refresh = elapsed_minutes > (token_expire_minutes - 5)
+
+        # Tier 2: Functional validation for tokens older than 5 minutes
+        # Skip validation for fresh tokens to avoid unnecessary MCP calls
+        if not needs_refresh and elapsed_minutes > 5:
+            if not self.validate_token():
+                print("[OAuth] Token validation failed, forcing refresh", flush=True)
+                needs_refresh = True
+
+        if needs_refresh:
+            try:
+                print("[OAuth] Refreshing access token...", flush=True)
+                self.access_token = self.setup_oauth()
+                self.token_created_time = time.time()
+                print(f"[OAuth] Token refreshed (valid for {token_expire_minutes} minutes)", flush=True)
+            except Exception as e:
+                print(f"[OAuth] ERROR: Token refresh failed: {e}", flush=True)
+                print("[OAuth] Will retry on next cycle", flush=True)
 
     def run(self) -> None:
         """
