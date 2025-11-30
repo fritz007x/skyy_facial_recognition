@@ -58,5 +58,5 @@ loguru==0.7.3
 ollama==0.6.1
 sounddevice==0.5.3
 soundfile==0.13.1
-pyttsx3>=2.90  # Keep version range as requested
+pyttsx3==2.91  # Keep version range as requested
 vosk==0.3.45  # Lightweight offline speech recognition with grammar support
