@@ -63,14 +63,3 @@ soundfile>=0.12.1
 pyttsx3>=2.90
 vosk>=0.3.45  # Lightweight offline speech recognition with grammar support
 numpy>=1.26.4  # Already specified above, needed for audio processing
-
-# Voice Assistant - Option 2: Gemma 3n Native Audio (Hugging Face Transformers)
-# Uncomment these for native multimodal audio processing with Gemma 3n
-# transformers>=4.53.0  # Required for Gemma 3n audio support
-# torch>=2.0.0  # PyTorch for model inference
-# torchaudio>=2.0.0  # Audio processing for Gemma 3n
-# timm>=0.9.0  # PyTorch Image Models - REQUIRED for Gemma 3n multimodal capabilities
-# librosa>=0.11.0  # Audio loading and processing - REQUIRED for audio input
-# accelerate>=0.20.0  # For efficient model loading
-# sentencepiece>=0.1.99  # Tokenizer dependency
-# huggingface-hub>=0.20.0  # Authentication and model download (REQUIRED for Gemma 3n)
