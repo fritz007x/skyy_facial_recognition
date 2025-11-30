@@ -40,9 +40,9 @@ class WakeWordDetector:
 
         Example:
             >>> detector = WakeWordDetector()
-            >>> detector.contains_wake_word("Hello Gemma, how are you?", ["hello gemma"])
+            >>> detector.contains_wake_word("Skyy, recognize me", ["skyy recognize me"])
             True
-            >>> detector.contains_wake_word("Just talking", ["hello gemma"])
+            >>> detector.contains_wake_word("Just talking", ["skyy recognize me"])
             False
         """
         if not text or not wake_words:
@@ -72,8 +72,8 @@ class WakeWordDetector:
 
         Example:
             >>> detector = WakeWordDetector()
-            >>> detector.find_wake_word("Hey Gemma!", ["hello gemma", "hey gemma"])
-            "hey gemma"
+            >>> detector.find_wake_word("Sky, recognize me!", ["skyy recognize me", "sky recognize me"])
+            "sky recognize me"
         """
         if not text or not wake_words:
             return ""

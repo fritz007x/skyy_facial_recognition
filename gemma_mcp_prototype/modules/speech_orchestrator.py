@@ -84,7 +84,7 @@ class SpeechOrchestrator:
         BACKWARD COMPATIBLE with original SpeechManager API.
 
         Args:
-            wake_words: List of acceptable wake phrases (e.g., ["hello gemma", "hey gemma"])
+            wake_words: List of acceptable wake phrases (e.g., ["skyy recognize me", "sky recognize me"])
             timeout: Optional timeout in seconds. None = listen indefinitely
             listen_duration: Duration to record audio for each listening attempt (default 5.0s)
             energy_threshold: Minimum audio energy to trigger transcription (default 100)

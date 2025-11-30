@@ -116,6 +116,10 @@ captured_image.txt
 !insightface-0.7.3-cp311-cp311-win_amd64.whl
 python-*.exe
 
+# Vosk models and archives (too large for git)
+vosk-model-*/
+*.zip
+
 # OAuth 2.1 sensitive data
 oauth_data/
 

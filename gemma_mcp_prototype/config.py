@@ -42,10 +42,10 @@ OLLAMA_HOST = "http://localhost:11434"
 # ============================================================================
 
 # Primary wake word
-WAKE_WORD = "hello gemma"
+WAKE_WORD = "skyy recognize me"
 
 # Alternative wake words that will also trigger recognition
-WAKE_WORD_ALTERNATIVES = ["hey gemma", "hi gemma", "gemma"]
+WAKE_WORD_ALTERNATIVES = ["sky recognize me", "sky recognise me", "skyy recognise me"]
 
 # ============================================================================
 # Camera Configuration

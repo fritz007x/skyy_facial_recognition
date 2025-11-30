@@ -131,8 +131,8 @@ class TranscriptionEngine:
             # Create recognizer with or without grammar
             if grammar:
                 # Vosk expects a direct JSON array, NOT {"grammar": [...]}
-                # Correct format: ["hello gemma", "hey gemma"]
-                # Incorrect format: {"grammar": ["hello gemma", "hey gemma"]}
+                # Correct format: ["skyy recognize me", "sky recognize me"]
+                # Incorrect format: {"grammar": ["skyy recognize me", "sky recognize me"]}
                 grammar_json = json.dumps(grammar)
                 recognizer = KaldiRecognizer(self.model, self.sample_rate, grammar_json)
                 recognizer.SetMaxAlternatives(0)

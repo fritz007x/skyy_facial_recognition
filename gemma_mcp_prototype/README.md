@@ -126,8 +126,8 @@ MCP_SERVER_SCRIPT = PROJECT_ROOT / "src" / "skyy_facial_recognition_mcp.py"
 OLLAMA_MODEL = "gemma3:4b"  # or "gemma3:12b" for better reasoning
 
 # Wake words
-WAKE_WORD = "hello gemma"
-WAKE_WORD_ALTERNATIVES = ["hey gemma", "gemma"]
+WAKE_WORD = "skyy recognize me"
+WAKE_WORD_ALTERNATIVES = ["sky recognize me", "sky recognise me", "skyy recognise me"]
 
 # Recognition threshold (lower = stricter)
 SIMILARITY_THRESHOLD = 0.25
@@ -165,14 +165,14 @@ SIMILARITY_THRESHOLD = 0.25
 [Init] All systems initialized!
 
 ============================================================
-  Listening for: ['hello gemma', 'hey gemma', 'gemma']
+  Listening for: ['skyy recognize me', 'sky recognize me', 'sky recognise me', 'skyy recognise me']
   Press Ctrl+C to exit
 ============================================================
 
-[Speech] Speaking: 'Hello! I'm Gemma. Say 'Hello Gemma' when you're ready.'
+[Speech] Speaking: 'Hello! I'm Skyy. Say 'Skyy, recognize me' when you're ready.'
 
-[Speech] Heard: 'hello gemma'
-[Wake] Detected wake word in: 'hello gemma'
+[Speech] Heard: 'skyy recognize me'
+[Wake] Detected wake word in: 'skyy recognize me'
 
 [Speech] Speaking: 'I'd like to take your photo to see if I recognize you. Is that okay?'
 [Speech] Response: 'yes'
@@ -278,7 +278,7 @@ Recognition responses include status for different scenarios:
 
 Edit `config.py`:
 ```python
-WAKE_WORD_ALTERNATIVES = ["hey gemma", "gemma", "skyy"]
+WAKE_WORD_ALTERNATIVES = ["sky recognize me", "sky recognise me", "skyy recognise me"]
 ```
 
 ### Custom Greeting Prompts
