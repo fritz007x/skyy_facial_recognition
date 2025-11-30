@@ -258,6 +258,73 @@ so you can remember them next time. Don't be robotic."""
                 return f"Hello, {recognition_result.get('user', {}).get('name', 'there')}! Nice to see you."
             return "Hello! I don't think we've met. Would you like me to remember you?"
 
+    def initialize_camera_with_retry(self, max_retries: int = 3) -> bool:
+        """
+        Initialize camera with retry logic and proper cleanup.
+
+        Handles common camera initialization failures after multiple cycles:
+        - Ensures previous camera instance is fully released
+        - Adds delay between release and re-initialization
+        - Retries on failure with exponential backoff
+
+        Args:
+            max_retries: Maximum number of initialization attempts (default 3)
+
+        Returns:
+            True if camera initialized successfully, False otherwise
+        """
+        for attempt in range(max_retries):
+            try:
+                # Check if camera is already initialized
+                if hasattr(self.camera, 'cap') and self.camera.cap is not None:
+                    # Camera already initialized, verify it's working
+                    if self.camera.cap.isOpened():
+                        return True
+                    else:
+                        # Camera handle exists but is closed, need to clean up
+                        print(f"[Camera] Camera handle closed, releasing before retry...", flush=True)
+                        try:
+                            self.camera.release()
+                        except Exception as release_error:
+                            print(f"[Camera] Error during release: {release_error}", flush=True)
+                        time.sleep(0.5)  # Give OS time to release device
+
+                # Log initialization attempt
+                if attempt > 0:
+                    print(f"[Camera] Initialization attempt {attempt + 1}/{max_retries}...", flush=True)
+                else:
+                    print(f"[Camera] Initializing camera...", flush=True)
+
+                # Ensure any previous instance is fully released
+                if hasattr(self.camera, 'cap'):
+                    try:
+                        self.camera.release()
+                    except:
+                        pass
+                    time.sleep(0.5)  # Give OS time to release device
+
+                # Attempt initialization
+                if self.camera.initialize():
+                    print(f"[Camera] Initialization successful", flush=True)
+                    return True
+                else:
+                    print(f"[Camera] Initialization attempt {attempt + 1} failed", flush=True)
+                    if attempt < max_retries - 1:
+                        # Exponential backoff: 1s, 2s, 4s
+                        delay = 2 ** attempt
+                        print(f"[Camera] Waiting {delay}s before retry...", flush=True)
+                        time.sleep(delay)
+            except Exception as e:
+                print(f"[Camera] Error on attempt {attempt + 1}: {e}", flush=True)
+                if attempt < max_retries - 1:
+                    delay = 2 ** attempt
+                    print(f"[Camera] Waiting {delay}s before retry...", flush=True)
+                    time.sleep(delay)
+
+        # All retries exhausted
+        print(f"[Camera] Failed to initialize after {max_retries} attempts", flush=True)
+        return False
+
     def handle_recognition(self) -> None:
         """
         Handle the full recognition flow after wake word detection - SYNCHRONOUS.
@@ -266,12 +333,10 @@ so you can remember them next time. Don't be robotic."""
         if not self.permission.request_camera_permission():
             return
 
-        # 2. Initialize camera if not already initialized (first time permission granted)
-        if not hasattr(self.camera, 'cap') or self.camera.cap is None:
-            print("[Recognition] Initializing camera (first time permission granted)...", flush=True)
-            if not self.camera.initialize():
-                self.speech.speak("Sorry, I couldn't access the camera. Please try again.")
-                return
+        # 2. Initialize camera with retry logic (handles multiple init/release cycles)
+        if not self.initialize_camera_with_retry(max_retries=3):
+            self.speech.speak("Sorry, I couldn't access the camera after multiple attempts. Please check your camera and try again.")
+            return
 
         # 3. Capture image
         time.sleep(1)  # Give user time to position
@@ -340,12 +405,10 @@ so you can remember them next time. Don't be robotic."""
         if not self.permission.request_registration_permission(name):
             return
 
-        # Ensure camera is initialized (should already be from previous permission)
-        if not hasattr(self.camera, 'cap') or self.camera.cap is None:
-            print("[Registration] Camera not initialized. Initializing now...", flush=True)
-            if not self.camera.initialize():
-                self.speech.speak("Sorry, I couldn't access the camera. Please try again.")
-                return
+        # Ensure camera is initialized with retry logic
+        if not self.initialize_camera_with_retry(max_retries=3):
+            self.speech.speak("Sorry, I couldn't access the camera after multiple attempts. Please try again.")
+            return
 
         # Capture image for registration
         self.speech.speak("Great! Look at the camera one more time.")
