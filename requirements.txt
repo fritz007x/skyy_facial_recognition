@@ -56,12 +56,13 @@ python-multipart>=0.0.6
 # Audit Logging
 loguru>=0.7.0
 
-# Voice Assistant - Option 1: Whisper-based (simpler, faster setup)
+# Voice Assistant - Vosk-based (offline, lightweight, grammar support)
 ollama>=0.1.0
 sounddevice>=0.4.6
 soundfile>=0.12.1
 pyttsx3>=2.90
-openai-whisper>=20250625  # Audio transcription (Ollama doesn't support audio input yet)
+vosk>=0.3.45  # Lightweight offline speech recognition with grammar support
+numpy>=1.26.4  # Already specified above, needed for audio processing
 
 # Voice Assistant - Option 2: Gemma 3n Native Audio (Hugging Face Transformers)
 # Uncomment these for native multimodal audio processing with Gemma 3n

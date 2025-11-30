@@ -60,7 +60,8 @@ CAPTURE_HEIGHT = 480
 
 # Number of frames to skip for camera warmup
 # This helps ensure consistent image quality
-WARMUP_FRAMES = 30
+# Reduced from 30 to 10 for faster startup on modern webcams
+WARMUP_FRAMES = 10
 
 # ============================================================================
 # Speech Configuration
@@ -71,6 +72,12 @@ SPEECH_RATE = 150
 
 # Text-to-speech volume (0.0 to 1.0)
 SPEECH_VOLUME = 1.0
+
+# Energy threshold for wake word detection
+# Lower = more sensitive (detects quieter speech)
+# Higher = less sensitive (filters out background noise)
+# Typical values: 50-100 (quiet), 100-200 (normal), 200-400 (noisy)
+ENERGY_THRESHOLD = 100
 
 # ============================================================================
 # Recognition Thresholds
