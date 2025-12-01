@@ -25,8 +25,9 @@ class OAuthConfig:
     # JWT algorithm
     ALGORITHM = "RS256"  # RSA signature for better security
 
-    # Paths
-    CONFIG_DIR = Path("oauth_data")
+    # Paths - use absolute path to project root
+    PROJECT_ROOT = Path(__file__).parent.parent.absolute()
+    CONFIG_DIR = PROJECT_ROOT / "oauth_data"
     PRIVATE_KEY_PATH = CONFIG_DIR / "private_key.pem"
     PUBLIC_KEY_PATH = CONFIG_DIR / "public_key.pem"
     CLIENTS_PATH = CONFIG_DIR / "clients.json"

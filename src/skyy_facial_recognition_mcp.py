@@ -45,7 +45,12 @@ mcp = FastMCP("skyy_facial_recognition_mcp")
 
 # Constants
 CHARACTER_LIMIT = 25000
-DATABASE_PATH = Path("./skyy_face_data")
+
+# Use absolute path to project root's skyy_face_data directory
+# This ensures all data (images, ChromaDB, logs, etc.) is stored in one location
+# regardless of where the MCP server process is launched from
+PROJECT_ROOT = Path(__file__).parent.parent.absolute()
+DATABASE_PATH = PROJECT_ROOT / "skyy_face_data"
 IMAGES_PATH = DATABASE_PATH / "images"
 INDEX_FILE = DATABASE_PATH / "index.json"
 CHROMA_PATH = DATABASE_PATH / "chroma_db"
