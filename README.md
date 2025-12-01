@@ -104,10 +104,6 @@ This project enhances the Skyy AI platform by developing a facial recognition ca
    source facial_mcp_py311/bin/activate
    ```
 
-   **Verify the virtual environment is using Python 3.11.9:**
-   ```bash
-   python --version  # Should show Python 3.11.9
-   ```
 
 4. **Install dependencies**
 
@@ -190,7 +186,7 @@ This project enhances the Skyy AI platform by developing a facial recognition ca
 - This is normal and only happens once
 
 
-### Running the MCP Server
+### Running the MCP Server (optional)
 
 The MCP server provides tools for facial recognition that can be integrated with MCP-compatible clients.
 
@@ -215,7 +211,7 @@ Keep this terminal running. The server will expose the following tools:
 - `skyy_delete_user` - Delete a user from the database
 - `skyy_get_database_stats` - Get database statistics
 
-### Testing with Webcam Capture Tool
+### Testing with Webcam Capture Tool (optional)
 
 For interactive testing and demonstration, use the webcam capture tool.
 
@@ -475,183 +471,152 @@ chromadb_data/
 - Much faster than linear search O(n)
 - Automatic index optimization
 
-## Voice Assistant with Gemma 3n
+# Gemma 3 Facial Recognition Prototype
 
-This project includes a production-ready voice-activated facial recognition assistant using Google's Gemma 3n models with native multimodal audio processing capabilities.
+Voice-activated facial recognition using Gemma 3 as the orchestrating LLM, integrated with the Skyy Facial Recognition MCP server.
 
-### Features
+## Overview
 
-- **Native audio understanding**: Gemma 3n processes audio directly (no Whisper/external models needed)
-- **Continuous listening**: Real-time microphone input with 3-second chunks
-- **Wake word detection**: Responds to "Hello Gemma", "Hey Gemma", or "Hi Gemma"
-- **MCP integration**: Automatic face recognition via MCP server
-- **Text-to-speech**: Personalized greetings with recognized user names
-- **Multiple model support**: E2B (faster, 2B params) or E4B (more accurate, 4B params)
-- **GPU acceleration**: Automatic CUDA detection for faster processing
+This prototype demonstrates how to build a voice-activated AI assistant that:
 
-### Workflow
+1. **Listens** for the wake word "Hello Gemma"
+2. **Requests permission** to capture a photo
+3. **Captures** an image from the webcam
+4. **Calls** the MCP `skyy_recognize_face` tool
+5. **Generates** a personalized greeting using Gemma 3
+6. **Offers** to register unknown users
+
+## Architecture
 
 ```
-[Microphone] → [Gemma 3n Audio] → [Wake Word Detection]
-                                          ↓
-                                    [Webcam Capture]
-                                          ↓
-                                    [MCP Recognition]
-                                          ↓
-                                    [TTS Greeting: "Hello, {name}!"]
+┌─────────────────────────────────────────────────────────────────────────┐
+│                         GEMMA 3 ORCHESTRATOR                            │
+│                        (Local via Ollama)                               │
+└─────────────────────────────────────────────────────────────────────────┘
+                                    │
+                    ┌───────────────┼───────────────┐
+                    │               │               │
+                    ▼               ▼               ▼
+            ┌──────────────┐ ┌──────────────┐ ┌──────────────┐
+            │   Speech     │ │   Webcam     │ │  MCP Client  │
+            │  Recognition │ │   Capture    │ │  (OAuth 2.1) │
+            └──────────────┘ └──────────────┘ └──────────────┘
+                    │               │               │
+                    │               │               ▼
+                    │               │   ┌─────────────────────┐
+                    │               │   │  skyy_facial_       │
+                    │               │   │  recognition_mcp.py │
+                    │               │   │                     │
+                    │               │   │ Tools:              │
+                    │               │   │ - recognize_face    │
+                    │               │   │ - register_user     │
+                    │               │   │ - get_health_status │
+                    │               │   └─────────────────────┘
+                    │               │               │
+                    ▼               ▼               ▼
+            ┌─────────────────────────────────────────────────┐
+            │              User Interaction                    │
+            │         (Voice + Visual Feedback)               │
+            └─────────────────────────────────────────────────┘
 ```
 
-### Quick Start
+## Prerequisites
 
-**1. Install dependencies:**
-```bash
-# Core dependencies
-pip install transformers>=4.53.0 torch torchaudio
+### 1. Skyy Facial Recognition Server
 
-# Required for Gemma 3n multimodal
-pip install timm>=0.9.0 librosa>=0.11.0
+This prototype requires the existing MCP server to be available. Ensure you have:
 
-# Audio and voice
-pip install sounddevice soundfile pyttsx3
+- Completed the [main project setup](../README.md)
+- Virtual environment `facial_mcp_py311` with all dependencies
+- InsightFace model downloaded (~200MB on first run)
 
-# HuggingFace and MCP
-pip install huggingface-hub opencv-python mcp
-```
+### 2. Ollama with Gemma 3
 
-**2. Authenticate with Hugging Face:**
-
-Gemma 3n models are GATED and require authentication:
-
-```bash
-# Get token from: https://huggingface.co/settings/tokens
-# Request access: https://huggingface.co/google/gemma-3n-E2B-it
-
-# Login (recommended)
-huggingface-cli login
-
-# OR set environment variable
-set HF_TOKEN=hf_your_token_here  # Windows
-export HF_TOKEN=hf_your_token_here  # Linux/Mac
-```
-
-**3. Verify setup:**
-```bash
-# Test authentication
-python test_hf_auth.py
-
-# Check dependencies
-python check_gemma3n_dependencies.py
-```
-
-**4. Run live voice assistant:**
-```bash
-# Start with E2B model (faster, recommended for CPU)
-python src/gemma3n_live_voice_assistant.py
-
-# Or use E4B model (more accurate, requires more resources)
-python src/gemma3n_live_voice_assistant.py --model google/gemma-3n-E4B-it
-
-# Adjust audio chunk duration (default 3.0s)
-python src/gemma3n_live_voice_assistant.py --duration 2.5
-```
-
-### Model Comparison
-
-| Feature | E2B (2B params) | E4B (4B params) |
-|---------|-----------------|-----------------|
-| **Accuracy** | Good | Excellent ✅ |
-| **Speed (CPU)** | ~15s/3s audio | ~30s/3s audio |
-| **Speed (GPU)** | ~2s/3s audio | ~3-4s/3s audio |
-| **Download size** | ~10 GB | ~15 GB |
-| **RAM required (CPU)** | ~8 GB | ~16 GB ⚠️ |
-| **VRAM (GPU)** | ~4 GB | ~8 GB |
-| **Loading time (CPU)** | 2-3 minutes | 20-40 minutes ⚠️ |
-| **Loading time (GPU)** | 30-60 seconds | 1-2 minutes |
-| **Best for** | CPU systems ✅ | GPU systems only |
-
-**⚠️ Important:** E4B requires significant resources and is **not recommended for CPU-only systems**. Use E2B for CPU deployment.
-
-### Usage Example
+Install Ollama and pull the Gemma 3 model:
 
 ```bash
-$ python src/gemma3n_live_voice_assistant.py
+# Install Ollama from https://ollama.com/
 
-[System] Initializing Gemma 3n Voice Assistant
-[System] Model: google/gemma-3n-E2B-it
-[System] Device: cuda
-[System] Authenticated with Hugging Face
-[System] Model loaded successfully
-[System] OAuth configured
+# Pull Gemma 3 model
+ollama pull gemma3:4b
 
-======================================================================
-         GEMMA 3N LIVE VOICE ASSISTANT
-         Voice-Activated Facial Recognition
-======================================================================
+# Verify it's working
+ollama run gemma3:4b "Say hello"
+```
+## Configuration (optional)
 
-Model: google/gemma-3n-E2B-it
-Chunk duration: 3.0s
-Wake word: 'Hello Gemma', 'Hey Gemma', or 'Hi Gemma'
+Edit `config.py` to match your environment:
 
-======================================================================
+```python
+# Paths - adjust if your virtual environment is elsewhere
+MCP_PYTHON_PATH = PROJECT_ROOT / "facial_mcp_py311" / "Scripts" / "python.exe"
+MCP_SERVER_SCRIPT = PROJECT_ROOT / "src" / "skyy_facial_recognition_mcp.py"
 
-[Gemma] Voice assistant activated. Say Hello Gemma to get started.
-[Gemma] Starting continuous listening...
+# Ollama model
+OLLAMA_MODEL = "gemma3:4b"  # or "gemma3:12b" for better reasoning
 
-[Listening] Recording...
-[Heard] "hello gemma"
-[Gemma] Wake word detected: 'hello gemma'
+# Wake words
+WAKE_WORD = "skyy recognize me"
+WAKE_WORD_ALTERNATIVES = ["sky recognize me", "sky recognise me", "skyy recognise me"]
 
-======================================================================
-[Gemma] Speaking: "Yes?"
-[Gemma] Capturing image...
-[Gemma] Image captured
-[Gemma] Connecting to MCP server...
-[Gemma] Analyzing face...
-[Gemma] Recognized: John Doe (85.2%)
-[Gemma] Speaking: "Hello, John Doe!"
-======================================================================
-
-[Gemma] Ready for next command...
+# Recognition threshold (lower = stricter)
+SIMILARITY_THRESHOLD = 0.25
 ```
 
-### Documentation
+## Usage
 
-- **[GEMMA3N_QUICKSTART.md](GEMMA3N_QUICKSTART.md)** - 3-minute setup guide
-- **[GEMMA3N_HUGGINGFACE_AUTH.md](GEMMA3N_HUGGINGFACE_AUTH.md)** - Authentication guide
-- **[GEMMA3N_NATIVE_AUDIO_GUIDE.md](GEMMA3N_NATIVE_AUDIO_GUIDE.md)** - Complete documentation
-- **[GEMMA3N_TIMM_DEPENDENCY_FIX.md](GEMMA3N_TIMM_DEPENDENCY_FIX.md)** - Dependency troubleshooting
+### Running the Prototype
 
-### Troubleshooting
+1. **Start Ollama** (if not running as a service):
+   ```bash
+   ollama serve
+   ```
 
-**"GatedRepoError: 401 Client Error"**
-```bash
-# Not authenticated - run authentication check
-python test_hf_auth.py
+2. **Activate virtual environment**:
+   ```bash
+   facial_mcp_py311\Scripts\activate  # Windows
+   ```
 
-# Login if needed
-huggingface-cli login
+3. **Run the prototype**:
+   ```bash
+   cd gemma_mcp_prototype
+   python main.py
+   ```
+
+4. **Interact**:
+   - Say a voice command
+   - Grant permission when asked
+   - Look at the camera
+   - Receive personalized greeting (or register if unknown)
+
+### Example Interaction
+
 ```
+[Init] All systems initialized!
 
-**"TimmWrapperModel requires the timm library"**
-```bash
-pip install timm>=0.9.0
+============================================================
+  Listening for: ['skyy recognize me', 'sky recognize me', 'sky recognise me', 'skyy recognise me']
+  Press Ctrl+C to exit
+============================================================
+
+[Speech] Speaking: 'Hello! I'm Skyy. Say 'Skyy, recognize me' when you're ready.'
+
+[Speech] Heard: 'skyy recognize me'
+[Wake] Detected wake word in: 'skyy recognize me'
+
+[Speech] Speaking: 'I'd like to take your photo to see if I recognize you. Is that okay?'
+[Speech] Response: 'yes'
+[Permission] camera_capture: GRANTED
+
+[Speech] Speaking: 'Great! Look at the camera.'
+[Vision] Captured image: 45632 bytes (base64)
+
+[Speech] Speaking: 'Let me take a look...'
+[MCP] Calling tool: skyy_recognize_face
+[Recognition] Result: {'status': 'recognized', 'user': {'name': 'Andy', ...}}
+
+[Speech] Speaking: 'Hey Andy! Great to see you again. How's the NLP project going?'
 ```
-
-**"load_audio_librosa requires the librosa library"**
-```bash
-pip install librosa>=0.11.0
-```
-
-**"Audio too quiet (RMS: 0.0001)"**
-- Check microphone permissions
-- Increase microphone volume
-- Speak louder or closer to mic
-- Try different microphone
-
-**Slow transcription on CPU**
-- Use E2B model instead of E4B
-- Reduce chunk duration: `--duration 2.0`
-- Consider GPU acceleration (100x faster)
 
 ## Project Status
 
