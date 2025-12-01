@@ -543,6 +543,24 @@ ollama pull gemma3:4b
 # Verify it's working
 ollama run gemma3:4b "Say hello"
 ```
+
+### 3. Vosk-model-small-en-us-0.15
+
+1. **Download it from:**
+
+https://alphacephei.com/vosk/models/vosk-model-small-en-us-0.15.zip
+
+2. **Extract it in the root directory so the final structure is:**
+
+```
+vosk-model-small-en-us-0.15/
+├── am/
+├── conf/
+├── graph/
+└── ...
+```
+
+
 ## Configuration (optional)
 
 Edit `config.py` to match your environment:
