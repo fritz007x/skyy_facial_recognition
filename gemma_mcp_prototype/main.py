@@ -33,9 +33,12 @@ from modules.speech_orchestrator import SpeechOrchestrator as SpeechManager
 from modules.mcp_sync_facade import SyncMCPFacade
 from modules.vision import WebcamManager
 from modules.permission import PermissionManager
+from modules.registration_orchestrator import RegistrationOrchestrator
 from config import (
     WAKE_WORD,
     WAKE_WORD_ALTERNATIVES,
+    REGISTRATION_WAKE_WORD,
+    REGISTRATION_WAKE_WORD_ALTERNATIVES,
     MCP_SERVER_SCRIPT,
     MCP_PYTHON_PATH,
     CAMERA_INDEX,
@@ -46,7 +49,10 @@ from config import (
     SPEECH_VOLUME,
     SIMILARITY_THRESHOLD,
     OLLAMA_MODEL,
-    ENERGY_THRESHOLD
+    ENERGY_THRESHOLD,
+    WHISPER_MODEL,
+    WHISPER_DEVICE,
+    WHISPER_COMPUTE_TYPE
 )
 
 # OAuth configuration - uses the same oauth_config as MCP server
@@ -78,6 +84,7 @@ class GemmaFacialRecognition:
         self.camera: Optional[WebcamManager] = None
         self.mcp: Optional[SyncMCPFacade] = None  # NEW: Clean synchronous facade
         self.permission: Optional[PermissionManager] = None
+        self.registration: Optional[RegistrationOrchestrator] = None
         self.access_token: Optional[str] = None
         self.token_created_time: float = 0
 
@@ -154,7 +161,18 @@ class GemmaFacialRecognition:
         # 5. Initialize permission manager
         self.permission = PermissionManager(self.speech)
 
-        # 6. Check server health status (NEW: Synchronous call)
+        # 6. Initialize voice registration orchestrator
+        print("\n[Init] Setting up voice registration orchestrator...", flush=True)
+        self.registration = RegistrationOrchestrator(
+            tts_speak_func=self.speech.speak,
+            whisper_model=WHISPER_MODEL,
+            whisper_device=WHISPER_DEVICE,
+            whisper_compute_type=WHISPER_COMPUTE_TYPE,
+            max_retries=3
+        )
+        print("[Init] Registration orchestrator ready (Whisper will load on first use).", flush=True)
+
+        # 7. Check server health status (NEW: Synchronous call)
         print("\n[Init] Checking server health...", flush=True)
         health = self.mcp.get_health_status(self.access_token)  # NO await!
         if health:
@@ -449,6 +467,35 @@ so you can remember them next time. Don't be robotic."""
             self.camera.release()
             print("[Registration] Camera released.", flush=True)
 
+    def handle_voice_registration(self) -> None:
+        """
+        Handle voice-based user registration flow.
+
+        Uses RegistrationOrchestrator to:
+        1. Capture name via VAD + Whisper
+        2. Confirm name with user
+        3. Request camera permission
+        4. Capture photo
+        5. Complete registration via MCP
+        """
+        print("\n[VoiceRegistration] Starting voice registration flow...", flush=True)
+
+        # Run the complete registration flow
+        success, name = self.registration.run_registration_flow(
+            permission_manager=self.permission,
+            camera_manager=self.camera,
+            mcp_facade=self.mcp,
+            access_token=self.access_token
+        )
+
+        if success:
+            print(f"[VoiceRegistration] Registration completed successfully for: {name}", flush=True)
+        else:
+            print("[VoiceRegistration] Registration failed or cancelled", flush=True)
+
+        # Reset orchestrator state
+        self.registration.reset()
+
     def validate_token(self) -> bool:
         """
         Validate that current token is still valid by testing it with a quick MCP call.
@@ -513,11 +560,19 @@ so you can remember them next time. Don't be robotic."""
     def run(self) -> None:
         """
         Main run loop - SYNCHRONOUS (matches skyy_compliment).
+
+        Listens for two types of wake words:
+        1. Recognition wake words: "Skyy, recognize me" -> facial recognition
+        2. Registration wake words: "Skyy, remember me" -> voice registration
         """
-        wake_words = [WAKE_WORD] + WAKE_WORD_ALTERNATIVES
+        # Combine both recognition and registration wake words
+        recognition_wake_words = [WAKE_WORD] + WAKE_WORD_ALTERNATIVES
+        registration_wake_words = [REGISTRATION_WAKE_WORD] + REGISTRATION_WAKE_WORD_ALTERNATIVES
+        all_wake_words = recognition_wake_words + registration_wake_words
 
         print("\n" + "=" * 60, flush=True)
-        print(f"  Listening for: {wake_words}", flush=True)
+        print(f"  Recognition wake words: {recognition_wake_words}", flush=True)
+        print(f"  Registration wake words: {registration_wake_words}", flush=True)
         print("  Press Ctrl+C to exit", flush=True)
         print("=" * 60 + "\n", flush=True)
 
@@ -531,7 +586,7 @@ so you can remember them next time. Don't be robotic."""
 
                 # Listen for wake word (using component-based speech)
                 detected, transcription = self.speech.listen_for_wake_word(
-                    wake_words,
+                    all_wake_words,
                     timeout=None,  # Listen indefinitely
                     energy_threshold=ENERGY_THRESHOLD
                 )
@@ -539,8 +594,24 @@ so you can remember them next time. Don't be robotic."""
                 if detected:
                     print(f"\n[Wake] Detected wake word in: '{transcription}'", flush=True)
 
-                    # Handle recognition flow
-                    self.handle_recognition()
+                    # Determine which type of wake word was detected
+                    transcription_lower = transcription.lower()
+
+                    # Check if it's a registration wake word
+                    is_registration = any(
+                        reg_word.lower() in transcription_lower
+                        for reg_word in registration_wake_words
+                    )
+
+                    if is_registration:
+                        # Handle voice registration flow
+                        print("[Main] Routing to voice registration...", flush=True)
+                        self.handle_voice_registration()
+                    else:
+                        # Handle recognition flow
+                        print("[Main] Routing to facial recognition...", flush=True)
+                        self.handle_recognition()
+
                     print("\n[Main] Returning to listening mode...\n", flush=True)
 
             except KeyboardInterrupt:
