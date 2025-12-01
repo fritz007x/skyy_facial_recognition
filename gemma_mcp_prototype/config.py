@@ -47,6 +47,29 @@ WAKE_WORD = "skyy recognize me"
 # Alternative wake words that will also trigger recognition
 WAKE_WORD_ALTERNATIVES = ["sky recognize me", "sky recognise me", "skyy recognise me"]
 
+# Registration wake word
+REGISTRATION_WAKE_WORD = "skyy remember me"
+
+# Alternative registration wake words
+REGISTRATION_WAKE_WORD_ALTERNATIVES = ["sky remember me", "sky remember me", "skyy remember me"]
+
+# ============================================================================
+# Voice Registration Configuration
+# ============================================================================
+
+# Whisper model for name transcription
+# Options: "tiny", "base", "small", "medium", "large"
+# "base" is a good balance of speed and accuracy for names
+WHISPER_MODEL = "base"
+
+# Whisper device (cpu or cuda)
+WHISPER_DEVICE = "cpu"
+
+# Whisper compute type
+# Options: "float32", "float16", "int8"
+# Use "float32" for CPU, "float16" for GPU
+WHISPER_COMPUTE_TYPE = "float32"
+
 # ============================================================================
 # Camera Configuration
 # ============================================================================
