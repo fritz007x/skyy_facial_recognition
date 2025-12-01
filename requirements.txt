@@ -23,8 +23,8 @@ onnx==1.19.1
 onnxruntime==1.23.2
 
 # Image Processing
-opencv-python==4.12.0.88
-opencv-python-headless==4.12.0.88
+opencv-python>=4.8.0,<4.13.0
+opencv-python-headless>=4.8.0,<4.13.0
 pillow==12.0.0
 
 # InsightFace Dependencies
