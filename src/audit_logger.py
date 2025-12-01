@@ -77,14 +77,18 @@ class AuditLogger:
     - Tamper-evident design (append-only)
     """
 
-    def __init__(self, log_dir: str = "./audit_logs", redact_pii: bool = False):
+    def __init__(self, log_dir: Optional[str] = None, redact_pii: bool = False):
         """
         Initialize audit logger.
 
         Args:
-            log_dir: Directory for audit log files
+            log_dir: Directory for audit log files (defaults to PROJECT_ROOT/audit_logs)
             redact_pii: If True, hash user identifiers and redact sensitive data
         """
+        if log_dir is None:
+            # Use absolute path to project root's audit_logs directory
+            project_root = Path(__file__).parent.parent.absolute()
+            log_dir = str(project_root / "audit_logs")
         self.log_dir = Path(log_dir)
         self.log_dir.mkdir(parents=True, exist_ok=True)
         self.redact_pii = redact_pii
@@ -476,12 +480,12 @@ class AuditLogger:
 audit_logger = AuditLogger(redact_pii=False)  # Set to True for production PII redaction
 
 
-def configure_audit_logging(log_dir: str = "./audit_logs", redact_pii: bool = False):
+def configure_audit_logging(log_dir: Optional[str] = None, redact_pii: bool = False):
     """
     Configure the global audit logger.
 
     Args:
-        log_dir: Directory for audit log files
+        log_dir: Directory for audit log files (defaults to PROJECT_ROOT/audit_logs)
         redact_pii: If True, enable PII redaction
     """
     global audit_logger

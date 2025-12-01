@@ -60,3 +60,6 @@ sounddevice==0.5.3
 soundfile==0.13.1
 pyttsx3==2.91  # In some versions only the first engine.say() call might be processed  
 vosk==0.3.45  # Lightweight offline speech recognition with grammar support
+webrtcvad-wheels==2.0.14
+faster-whisper==1.1.0
+noisereduce==3.0.2
