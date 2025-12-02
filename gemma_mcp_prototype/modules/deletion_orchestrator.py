@@ -22,6 +22,7 @@ from enum import Enum
 
 from .voice_activity_detector import VoiceActivityDetector
 from .whisper_transcription_engine import WhisperTranscriptionEngine
+from .llm_confirmation_parser import LLMConfirmationParser
 
 
 class DeletionState(Enum):
@@ -57,7 +58,13 @@ class DeletionOrchestrator:
         tts_speak_func,
         whisper_model: str = "base",
         whisper_device: str = "cpu",
-        whisper_compute_type: str = "float32"
+        whisper_compute_type: str = "float32",
+        enable_llm_confirmation: bool = True,
+        ollama_host: str = "http://localhost:11434",
+        llm_model: str = "gemma3:4b",
+        llm_timeout: float = 2.0,
+        llm_temperature: float = 0.1,
+        llm_max_tokens: int = 10
     ):
         """
         Initialize Deletion Orchestrator.
@@ -67,6 +74,12 @@ class DeletionOrchestrator:
             whisper_model: Whisper model size (tiny, base, small, medium)
             whisper_device: Device for Whisper inference (cpu, cuda)
             whisper_compute_type: Whisper compute type (float32, float16, int8)
+            enable_llm_confirmation: Use LLM for confirmation parsing (default: True)
+            ollama_host: Ollama API endpoint (default: http://localhost:11434)
+            llm_model: Ollama model for confirmations (default: gemma3:4b)
+            llm_timeout: LLM request timeout in seconds (default: 2.0)
+            llm_temperature: LLM temperature (default: 0.1)
+            llm_max_tokens: Max tokens to generate (default: 10)
         """
         self.tts_speak = tts_speak_func
 
@@ -85,30 +98,40 @@ class DeletionOrchestrator:
             compute_type=whisper_compute_type
         )
 
+        # Initialize LLM confirmation parser
+        self.llm_parser = LLMConfirmationParser(
+            ollama_host=ollama_host,
+            model_name=llm_model,
+            enable_llm=enable_llm_confirmation,
+            timeout_sec=llm_timeout,
+            temperature=llm_temperature,
+            max_tokens=llm_max_tokens
+        )
+
         # State
         self.state = DeletionState.IDLE
 
-    def _extract_confirmation(self, text: str) -> Optional[bool]:
+    def _extract_confirmation(self, text: str, question_context: Optional[str] = None) -> Optional[bool]:
         """
-        Extract yes/no confirmation from transcribed text.
+        Extract yes/no confirmation from transcribed text using LLM-based parsing.
+
+        This method now uses Gemma 3 via Ollama for natural language understanding,
+        with graceful fallback to rule-based parsing if LLM is unavailable.
 
         Args:
             text: Transcribed confirmation text
+            question_context: The question that was asked (helps LLM understand context)
 
         Returns:
             True for yes, False for no, None if unclear
+
+        Example:
+            >>> self._extract_confirmation("Sure thing!", "Is that correct?")
+            True
+            >>> self._extract_confirmation("Not really", "Do you want to proceed?")
+            False
         """
-        text_lower = text.lower().strip()
-
-        # Positive responses
-        if any(word in text_lower for word in ["yes", "yeah", "yep", "correct", "right", "sure", "confirm"]):
-            return True
-
-        # Negative responses
-        if any(word in text_lower for word in ["no", "nope", "wrong", "incorrect", "cancel", "stop"]):
-            return False
-
-        return None
+        return self.llm_parser.parse_confirmation(text, question_context)
 
     def recognize_user(
         self,
@@ -208,8 +231,9 @@ class DeletionOrchestrator:
         conf_text = self.whisper.transcribe(audio, beam_size=5)
         print(f"[Deletion] Identity confirmation transcription: '{conf_text}'", flush=True)
 
-        # Extract yes/no
-        confirmed = self._extract_confirmation(conf_text)
+        # Extract yes/no with context
+        question = f"I recognized you as {name}. Is that correct?"
+        confirmed = self._extract_confirmation(conf_text, question_context=question)
 
         if confirmed is True:
             print("[Deletion] Identity confirmed", flush=True)
@@ -259,8 +283,9 @@ class DeletionOrchestrator:
         conf_text = self.whisper.transcribe(audio, beam_size=5)
         print(f"[Deletion] Final confirmation transcription: '{conf_text}'", flush=True)
 
-        # Extract yes/no
-        confirmed = self._extract_confirmation(conf_text)
+        # Extract yes/no with context
+        question = "Say yes to proceed with deletion, or no to cancel."
+        confirmed = self._extract_confirmation(conf_text, question_context=question)
 
         if confirmed is True:
             print("[Deletion] Final confirmation received", flush=True)

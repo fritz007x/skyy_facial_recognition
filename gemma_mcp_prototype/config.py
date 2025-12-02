@@ -115,10 +115,36 @@ ENERGY_THRESHOLD = 100
 # Similarity threshold for face recognition
 # This is the DISTANCE threshold (lower = stricter matching)
 # - < 0.20: Very strong match (same person)
-# - 0.20-0.25: Strong match (likely same person)  
+# - 0.20-0.25: Strong match (likely same person)
 # - 0.25-0.40: Weak match (possibly same person)
 # - > 0.40: No match (different people)
 SIMILARITY_THRESHOLD = 0.25
 
 # Minimum confidence for face detection
 MIN_DETECTION_CONFIDENCE = 0.5
+
+# ============================================================================
+# LLM Confirmation Parser Configuration
+# ============================================================================
+
+# Enable LLM-based confirmation parsing (uses Gemma 3 via Ollama)
+# If disabled or Ollama is unavailable, falls back to rule-based keyword matching
+ENABLE_LLM_CONFIRMATION = True
+
+# Model to use for confirmation parsing
+# Options: "gemma3:4b" (faster), "gemma3:12b" (better understanding)
+# Recommendation: Use 4b for low-latency confirmations
+LLM_CONFIRMATION_MODEL = "gemma3:4b"
+
+# Timeout for LLM confirmation requests (seconds)
+# Keep this low to avoid delays in voice flows
+LLM_CONFIRMATION_TIMEOUT = 2.0
+
+# Temperature for LLM confirmation parsing
+# Lower = more deterministic, higher = more creative
+# Recommendation: Keep low (0.1) for consistent yes/no parsing
+LLM_CONFIRMATION_TEMPERATURE = 0.1
+
+# Maximum tokens to generate for confirmation parsing
+# We only need "YES", "NO", or "UNCLEAR", so keep this very low
+LLM_CONFIRMATION_MAX_TOKENS = 10

@@ -6,31 +6,90 @@ Provides voice-based permission requests for:
 - User registration
 - Data processing
 
+Uses Gemma 3 LLM for natural language confirmation parsing.
 Logs all permission decisions for audit purposes.
 """
 
 import time
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 from datetime import datetime
+
+from .voice_activity_detector import VoiceActivityDetector
+from .whisper_transcription_engine import WhisperTranscriptionEngine
+from .llm_confirmation_parser import LLMConfirmationParser
 
 
 class PermissionManager:
     """
     Handles user permission requests and logging.
-    
-    Uses voice interaction to request and receive user consent
-    before performing operations like camera capture or registration.
+
+    Uses voice interaction with Gemma 3 LLM for natural language
+    confirmation parsing before performing operations like camera
+    capture or registration.
+
+    Features:
+    - Voice Activity Detection (VAD) for automatic speech detection
+    - Whisper AI for accurate speech-to-text transcription
+    - Gemma 3 LLM for understanding natural yes/no responses
+    - Graceful fallback to rule-based parsing if LLM unavailable
     """
-    
-    def __init__(self, speech_manager):
+
+    def __init__(
+        self,
+        speech_manager,
+        whisper_model: str = "base",
+        whisper_device: str = "cpu",
+        whisper_compute_type: str = "float32",
+        enable_llm_confirmation: bool = True,
+        ollama_host: str = "http://localhost:11434",
+        llm_model: str = "gemma3:4b",
+        llm_timeout: float = 2.0,
+        llm_temperature: float = 0.1,
+        llm_max_tokens: int = 10
+    ):
         """
-        Initialize permission manager.
-        
+        Initialize permission manager with LLM-based confirmation parsing.
+
         Args:
             speech_manager: SpeechManager instance for voice interaction
+            whisper_model: Whisper model size (tiny, base, small, medium)
+            whisper_device: Device for Whisper inference (cpu, cuda)
+            whisper_compute_type: Whisper compute type (float32, float16, int8)
+            enable_llm_confirmation: Use LLM for confirmation parsing (default: True)
+            ollama_host: Ollama API endpoint (default: http://localhost:11434)
+            llm_model: Ollama model for confirmations (default: gemma3:4b)
+            llm_timeout: LLM request timeout in seconds (default: 2.0)
+            llm_temperature: LLM temperature (default: 0.1)
+            llm_max_tokens: Max tokens to generate (default: 10)
         """
         self.speech = speech_manager
         self.permissions_log: List[Dict[str, Any]] = []
+
+        # Initialize Voice Activity Detector for automatic speech detection
+        self.vad = VoiceActivityDetector(
+            sample_rate=16000,
+            vad_mode=3,
+            silence_duration_sec=1.0,
+            min_speech_sec=0.4,
+            timeout_sec=10.0
+        )
+
+        # Initialize Whisper for accurate transcription
+        self.whisper = WhisperTranscriptionEngine(
+            model_name=whisper_model,
+            device=whisper_device,
+            compute_type=whisper_compute_type
+        )
+
+        # Initialize LLM confirmation parser
+        self.llm_parser = LLMConfirmationParser(
+            ollama_host=ollama_host,
+            model_name=llm_model,
+            enable_llm=enable_llm_confirmation,
+            timeout_sec=llm_timeout,
+            temperature=llm_temperature,
+            max_tokens=llm_max_tokens
+        )
     
     def _log_permission(self, permission_type: str, granted: bool, details: Dict[str, Any] = None) -> None:
         """
@@ -57,13 +116,22 @@ class PermissionManager:
         status = "GRANTED" if granted else "DENIED"
         print(f"[Permission] {permission_type}: {status}")
     
-    def ask_permission(self, prompt: str, log_type: str = "general",
-                       granted_message: str = None, denied_message: str = None) -> bool:
+    def ask_permission(
+        self,
+        prompt: str,
+        log_type: str = "general",
+        granted_message: Optional[str] = None,
+        denied_message: Optional[str] = None
+    ) -> bool:
         """
-        Ask a permission question, provide feedback, and log the response.
+        Ask a permission question with natural language understanding.
 
-        This is the complete permission flow: asks the question, listens for response,
-        checks for affirmative words, speaks appropriate feedback, and logs the decision.
+        This flow uses Gemma 3 LLM for understanding natural yes/no responses:
+        1. Speak the permission prompt
+        2. Use VAD to automatically detect when user starts/stops speaking
+        3. Transcribe response with Whisper AI
+        4. Parse with Gemma 3 LLM for semantic understanding
+        5. Gracefully fallback to rule-based parsing if LLM unavailable
 
         Args:
             prompt: The question to ask the user
@@ -72,7 +140,7 @@ class PermissionManager:
             denied_message: Optional message to speak if permission denied
 
         Returns:
-            True if user gives affirmative response
+            True if user gives affirmative response (including natural variations)
 
         Example:
             granted = permission.ask_permission(
@@ -81,41 +149,60 @@ class PermissionManager:
                 granted_message="Great! Look at the camera.",
                 denied_message="No problem."
             )
+
+        Natural responses understood:
+            Affirmative: "Yes", "Sure", "Go ahead", "Absolutely", "I'm good with that"
+            Negative: "No", "Not really", "Maybe not", "I'd rather not"
         """
-        # Speak the prompt
+        # Speak the permission prompt
         print(f"[Permission] Asking: '{prompt}'", flush=True)
         self.speech.speak(prompt)
 
         # Small delay to ensure TTS completes fully before listening
         time.sleep(0.3)
 
-        # Listen for command using grammar-based recognition (more accurate)
-        affirmative_commands = ["yes", "yeah", "sure", "okay", "ok", "yep", "yup"]
-        negative_commands = ["no", "nope", "nah"]
-        all_commands = affirmative_commands + negative_commands
+        # Use VAD to record response (automatic speech detection)
+        print("[Permission] Listening for response...", flush=True)
+        success, audio = self.vad.record_speech(beep=False)
 
-        response = self.speech.listen_for_command(all_commands, timeout=5.0)
-
-        if not response:
-            print("[Permission] No valid response detected.", flush=True)
-            self._log_permission(log_type, False, {"prompt": prompt, "response": "none"})
+        if not success or audio is None:
+            print("[Permission] No response detected.", flush=True)
+            self._log_permission(
+                log_type,
+                False,
+                {"prompt": prompt, "response": "none", "error": "no_audio"}
+            )
             if denied_message:
                 self.speech.speak(denied_message)
             return False
 
-        # Check if response is affirmative
-        granted = response.lower() in [cmd.lower() for cmd in affirmative_commands]
+        # Transcribe response with Whisper
+        print("[Permission] Transcribing response...", flush=True)
+        response_text = self.whisper.transcribe(audio, beam_size=5)
+        print(f"[Permission] Response transcribed: '{response_text}'", flush=True)
+
+        # Parse with LLM for natural language understanding
+        confirmed = self.llm_parser.parse_confirmation(response_text, question_context=prompt)
 
         # Log the permission decision
-        self._log_permission(log_type, granted, {"prompt": prompt, "response": response})
+        self._log_permission(
+            log_type,
+            confirmed is True,
+            {"prompt": prompt, "response": response_text, "parsed": confirmed}
+        )
 
         # Speak appropriate feedback
-        if granted and granted_message:
+        if confirmed is True and granted_message:
             self.speech.speak(granted_message)
-        elif not granted and denied_message:
+        elif confirmed is False and denied_message:
             self.speech.speak(denied_message)
+        elif confirmed is None:
+            # Unclear response - default to denied for safety
+            print("[Permission] Unclear response, defaulting to denied.", flush=True)
+            if denied_message:
+                self.speech.speak(denied_message)
 
-        return granted
+        return confirmed is True
     
     def request_camera_permission(self) -> bool:
         """

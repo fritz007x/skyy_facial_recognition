@@ -55,7 +55,12 @@ from config import (
     ENERGY_THRESHOLD,
     WHISPER_MODEL,
     WHISPER_DEVICE,
-    WHISPER_COMPUTE_TYPE
+    WHISPER_COMPUTE_TYPE,
+    ENABLE_LLM_CONFIRMATION,
+    LLM_CONFIRMATION_MODEL,
+    LLM_CONFIRMATION_TIMEOUT,
+    LLM_CONFIRMATION_TEMPERATURE,
+    LLM_CONFIRMATION_MAX_TOKENS
 )
 
 # OAuth configuration - uses the same oauth_config as MCP server
@@ -162,8 +167,19 @@ class GemmaFacialRecognition:
             print("[Init] ERROR: MCP connection failed", flush=True)
             return False
 
-        # 5. Initialize permission manager
-        self.permission = PermissionManager(self.speech)
+        # 5. Initialize permission manager with LLM confirmation parsing
+        print("\n[Init] Setting up permission manager with Gemma 3 LLM...", flush=True)
+        self.permission = PermissionManager(
+            self.speech,
+            whisper_model=WHISPER_MODEL,
+            whisper_device=WHISPER_DEVICE,
+            whisper_compute_type=WHISPER_COMPUTE_TYPE,
+            enable_llm_confirmation=ENABLE_LLM_CONFIRMATION,
+            llm_model=LLM_CONFIRMATION_MODEL,
+            llm_timeout=LLM_CONFIRMATION_TIMEOUT,
+            llm_temperature=LLM_CONFIRMATION_TEMPERATURE,
+            llm_max_tokens=LLM_CONFIRMATION_MAX_TOKENS
+        )
 
         # 6. Initialize voice registration orchestrator
         print("\n[Init] Setting up voice registration orchestrator...", flush=True)
