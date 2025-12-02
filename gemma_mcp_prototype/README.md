@@ -1,6 +1,6 @@
 # Gemma 3 Facial Recognition Prototype
 
-Voice-activated facial recognition using Gemma 3 as the orchestrating LLM, integrated with the Skyy Facial Recognition MCP server.
+Voice-activated facial recognition system integrated with the Skyy Facial Recognition MCP server, enhanced with Gemma 3 for natural language understanding.
 
 ## Overview
 
@@ -10,15 +10,15 @@ This prototype demonstrates how to build a voice-activated AI assistant that:
 2. **Recognizes** users via facial recognition
 3. **Registers** new users with voice-captured names
 4. **Deletes** user profiles with multi-step confirmation
-5. **Generates** personalized greetings using Gemma 3
+5. **Understands** natural language confirmations (yes/no responses in natural ways)
 6. **Manages** user privacy with camera permission requests
 
 ## Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────────────────────┐
-│                         GEMMA 3 ORCHESTRATOR                            │
-│                        (Local via Ollama)                               │
+│                      VOICE ORCHESTRATION SYSTEM                         │
+│              (Speech Recognition, Vision, MCP Integration)              │
 └─────────────────────────────────────────────────────────────────────────┘
                                     │
                     ┌───────────────┼───────────────┐
@@ -27,21 +27,23 @@ This prototype demonstrates how to build a voice-activated AI assistant that:
             ┌──────────────┐ ┌──────────────┐ ┌──────────────┐
             │   Speech     │ │   Webcam     │ │  MCP Client  │
             │  Recognition │ │   Capture    │ │  (OAuth 2.1) │
+            │   + Whisper  │ │  + InsightFace│ │ Recognition, │
+            │              │ │              │ │ Registration,│
+            │              │ │              │ │   Deletion   │
             └──────────────┘ └──────────────┘ └──────────────┘
                     │               │               │
-                    │               │               ▼
-                    │               │   ┌─────────────────────┐
-                    │               │   │  skyy_facial_       │
-                    │               │   │  recognition_mcp.py │
-                    │               │   │                     │
-                    │               │   │ Tools:              │
-                    │               │   │ - recognize_face    │
-                    │               │   │ - register_user     │
-                    │               │   │ - delete_user       │
-                    │               │   │ - get_health_status │
-                    │               │   └─────────────────────┘
-                    │               │               │
-                    ▼               ▼               ▼
+                    ├───────────────┴───────────────┤
+                    │                               │
+                    ▼                               ▼
+            ┌──────────────────┐         ┌──────────────────┐
+            │ Orchestrators    │         │  Gemma 3 (LLM)   │
+            │ - Registration   │         │   via Ollama      │
+            │ - Deletion       │         │ - Confirmations   │
+            │ - Recognition    │         │ - Greetings      │
+            └──────────────────┘         └──────────────────┘
+                    │                               │
+                    └───────────────┬───────────────┘
+                                    ▼
             ┌─────────────────────────────────────────────────┐
             │              User Interaction                    │
             │         (Voice + Visual Feedback)               │
@@ -222,6 +224,7 @@ Recognizes registered users and generates personalized greetings:
 Register new users with voice-captured names:
 - Voice Activity Detection (VAD) for automatic speech capture
 - Whisper AI for accurate name transcription
+- **Natural language confirmation** using Gemma 3 LLM
 - Multi-step confirmation to verify correct name
 - Face photo capture and storage
 - Prevents duplicate registrations
@@ -241,6 +244,7 @@ SYSTEM: "Registration complete. Welcome, John Smith!"
 
 Delete user profiles with multi-step safety confirmation:
 - Face recognition to verify identity
+- **Natural language confirmation** using Gemma 3 LLM
 - Voice confirmation of recognized name
 - Clear explanation of deletion consequences
 - Final confirmation required
@@ -250,24 +254,31 @@ Delete user profiles with multi-step safety confirmation:
 - Multi-step confirmation prevents accidental deletion
 - Face authentication required (must be physically present)
 - Identity verification via voice
+- **Smart confirmation parsing** - understands natural responses like "Sure thing", "Not really", "Go ahead"
 - Explicit consent at each step
 - Default to cancel on unclear responses
+- Automatic fallback to keyword matching if LLM unavailable
 
-**Example Flow:**
+**Example Flow (with Natural Language Understanding):**
 ```
 USER: "Skyy, forget me"
 SYSTEM: "I need to verify your identity before deleting your profile."
 SYSTEM: "Please look at the camera so I can confirm your identity."
 SYSTEM: "I recognized you as John Smith. Is that correct? Say yes or no."
-USER: "Yes"
+USER: "Sure, that's me"  ← Natural language response!
 SYSTEM: "John Smith, this will permanently delete all your data from the system,
          including your face profile and all associated information.
          This action cannot be undone.
          Say yes to proceed with deletion, or no to cancel."
-USER: "Yes"
+USER: "Go ahead"  ← Natural language response!
 SYSTEM: "Deleting your profile now. Please wait."
 SYSTEM: "Your profile has been successfully deleted, John Smith. Goodbye."
 ```
+
+**Accepted Confirmation Phrases:**
+- Affirmative: "Yes", "Yeah", "Sure", "Absolutely", "Go ahead", "Correct", "That's right"
+- Negative: "No", "Nope", "Not really", "I don't think so", "Wrong", "Try again"
+- Unclear: "Maybe", "I'm not sure" → Safely cancels the operation
 
 ## MCP Integration Details
 
