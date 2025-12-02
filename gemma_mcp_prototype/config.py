@@ -53,6 +53,12 @@ REGISTRATION_WAKE_WORD = "skyy remember me"
 # Alternative registration wake words
 REGISTRATION_WAKE_WORD_ALTERNATIVES = ["sky remember me", "sky remember me", "skyy remember me"]
 
+# Deletion wake word
+DELETION_WAKE_WORD = "skyy forget me"
+
+# Alternative deletion wake words
+DELETION_WAKE_WORD_ALTERNATIVES = ["sky forget me", "skyy delete me", "sky delete me"]
+
 # ============================================================================
 # Voice Registration Configuration
 # ============================================================================

@@ -34,11 +34,14 @@ from modules.mcp_sync_facade import SyncMCPFacade
 from modules.vision import WebcamManager
 from modules.permission import PermissionManager
 from modules.registration_orchestrator import RegistrationOrchestrator
+from modules.deletion_orchestrator import DeletionOrchestrator
 from config import (
     WAKE_WORD,
     WAKE_WORD_ALTERNATIVES,
     REGISTRATION_WAKE_WORD,
     REGISTRATION_WAKE_WORD_ALTERNATIVES,
+    DELETION_WAKE_WORD,
+    DELETION_WAKE_WORD_ALTERNATIVES,
     MCP_SERVER_SCRIPT,
     MCP_PYTHON_PATH,
     CAMERA_INDEX,
@@ -85,6 +88,7 @@ class GemmaFacialRecognition:
         self.mcp: Optional[SyncMCPFacade] = None  # NEW: Clean synchronous facade
         self.permission: Optional[PermissionManager] = None
         self.registration: Optional[RegistrationOrchestrator] = None
+        self.deletion: Optional[DeletionOrchestrator] = None
         self.access_token: Optional[str] = None
         self.token_created_time: float = 0
 
@@ -172,7 +176,17 @@ class GemmaFacialRecognition:
         )
         print("[Init] Registration orchestrator ready (Whisper will load on first use).", flush=True)
 
-        # 7. Check server health status (NEW: Synchronous call)
+        # 7. Initialize deletion orchestrator
+        print("\n[Init] Setting up deletion orchestrator...", flush=True)
+        self.deletion = DeletionOrchestrator(
+            tts_speak_func=self.speech.speak,
+            whisper_model=WHISPER_MODEL,
+            whisper_device=WHISPER_DEVICE,
+            whisper_compute_type=WHISPER_COMPUTE_TYPE
+        )
+        print("[Init] Deletion orchestrator ready (Whisper shared with registration).", flush=True)
+
+        # 8. Check server health status (NEW: Synchronous call)
         print("\n[Init] Checking server health...", flush=True)
         health = self.mcp.get_health_status(self.access_token)  # NO await!
         if health:
@@ -182,7 +196,7 @@ class GemmaFacialRecognition:
             if health.get('degraded_mode', {}).get('active'):
                 print("[Init] WARNING: Server is in degraded mode", flush=True)
 
-        # 7. Verify Ollama/Gemma is available
+        # 9. Verify Ollama/Gemma is available
         print(f"\n[Init] Checking Ollama model ({OLLAMA_MODEL})...", flush=True)
         try:
             ollama.chat(
@@ -496,6 +510,37 @@ so you can remember them next time. Don't be robotic."""
         # Reset orchestrator state
         self.registration.reset()
 
+    def handle_deletion(self) -> None:
+        """
+        Handle voice-activated user deletion flow.
+
+        Uses DeletionOrchestrator to:
+        1. Request camera permission
+        2. Recognize user via face
+        3. Confirm identity via voice
+        4. Explain deletion consequences
+        5. Get final confirmation
+        6. Execute deletion via MCP
+        """
+        print("\n[Deletion] Starting deletion flow...", flush=True)
+
+        # Run the complete deletion flow
+        success, user_id = self.deletion.run_deletion_flow(
+            permission_manager=self.permission,
+            camera_manager=self.camera,
+            mcp_facade=self.mcp,
+            access_token=self.access_token,
+            confidence_threshold=SIMILARITY_THRESHOLD
+        )
+
+        if success:
+            print(f"[Deletion] Deletion completed successfully for user: {user_id}", flush=True)
+        else:
+            print("[Deletion] Deletion failed or cancelled", flush=True)
+
+        # Reset orchestrator state
+        self.deletion.reset()
+
     def validate_token(self) -> bool:
         """
         Validate that current token is still valid by testing it with a quick MCP call.
@@ -561,18 +606,21 @@ so you can remember them next time. Don't be robotic."""
         """
         Main run loop - SYNCHRONOUS (matches skyy_compliment).
 
-        Listens for two types of wake words:
+        Listens for three types of wake words:
         1. Recognition wake words: "Skyy, recognize me" -> facial recognition
         2. Registration wake words: "Skyy, remember me" -> voice registration
+        3. Deletion wake words: "Skyy, forget me" -> user deletion
         """
-        # Combine both recognition and registration wake words
+        # Combine all wake words
         recognition_wake_words = [WAKE_WORD] + WAKE_WORD_ALTERNATIVES
         registration_wake_words = [REGISTRATION_WAKE_WORD] + REGISTRATION_WAKE_WORD_ALTERNATIVES
-        all_wake_words = recognition_wake_words + registration_wake_words
+        deletion_wake_words = [DELETION_WAKE_WORD] + DELETION_WAKE_WORD_ALTERNATIVES
+        all_wake_words = recognition_wake_words + registration_wake_words + deletion_wake_words
 
         print("\n" + "=" * 60, flush=True)
         print(f"  Recognition wake words: {recognition_wake_words}", flush=True)
         print(f"  Registration wake words: {registration_wake_words}", flush=True)
+        print(f"  Deletion wake words: {deletion_wake_words}", flush=True)
         print("  Press Ctrl+C to exit", flush=True)
         print("=" * 60 + "\n", flush=True)
 
@@ -597,13 +645,23 @@ so you can remember them next time. Don't be robotic."""
                     # Determine which type of wake word was detected
                     transcription_lower = transcription.lower()
 
+                    # Check if it's a deletion wake word (highest priority for safety)
+                    is_deletion = any(
+                        del_word.lower() in transcription_lower
+                        for del_word in deletion_wake_words
+                    )
+
                     # Check if it's a registration wake word
                     is_registration = any(
                         reg_word.lower() in transcription_lower
                         for reg_word in registration_wake_words
                     )
 
-                    if is_registration:
+                    if is_deletion:
+                        # Handle deletion flow
+                        print("[Main] Routing to user deletion...", flush=True)
+                        self.handle_deletion()
+                    elif is_registration:
                         # Handle voice registration flow
                         print("[Main] Routing to voice registration...", flush=True)
                         self.handle_voice_registration()
