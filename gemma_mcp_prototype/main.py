@@ -285,7 +285,7 @@ class GemmaFacialRecognition:
             similarity = max(0, min(100, (1 - distance / 2) * 100))
             metadata = user.get("metadata", {})
 
-            prompt = f"""You are Gemma, a friendly AI assistant at Miami Dade College.
+            prompt = f"""You are Sky, a friendly AI assistant at Miami Dade College.
 Generate a warm, personalized greeting for {name} who you just recognized.
 
 Recognition confidence: {similarity:.0f}%
@@ -299,14 +299,14 @@ If there's relevant metadata (like department or role), you can mention it natur
             user = recognition_result.get("user", {})
             possible_name = user.get("name", "")
 
-            prompt = f"""You are Gemma, a friendly AI assistant. Generate a polite greeting
+            prompt = f"""You are Sky, a friendly AI assistant. Generate a polite greeting
 for someone you're not quite sure about. You think they might be {possible_name}, but you're not certain.
 
 Keep it brief (1-2 sentences), friendly, and gently ask if you got their name right.
 Don't be technical or mention confidence scores."""
 
         else:  # not_recognized or error
-            prompt = """You are Gemma, a friendly AI assistant at Miami Dade College.
+            prompt = """You are Sky, a friendly AI assistant at Miami Dade College.
 Generate a polite greeting for someone you don't recognize yet.
 
 Keep it brief (1-2 sentences), welcoming, and offer to help them register
