@@ -59,6 +59,18 @@ DELETION_WAKE_WORD = "skyy forget me"
 # Alternative deletion wake words
 DELETION_WAKE_WORD_ALTERNATIVES = ["sky forget me", "skyy delete me", "sky delete me"]
 
+# Update wake word
+UPDATE_WAKE_WORD = "skyy update me"
+
+# Alternative update wake words
+UPDATE_WAKE_WORD_ALTERNATIVES = [
+    "sky update me",
+    "skyy update my profile",
+    "sky update my profile",
+    "skyy change my information",
+    "sky change my information"
+]
+
 # ============================================================================
 # Voice Registration Configuration
 # ============================================================================

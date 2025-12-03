@@ -35,6 +35,7 @@ from modules.vision import WebcamManager
 from modules.permission import PermissionManager
 from modules.registration_orchestrator import RegistrationOrchestrator
 from modules.deletion_orchestrator import DeletionOrchestrator
+from modules.update_orchestrator import UpdateOrchestrator
 from config import (
     WAKE_WORD,
     WAKE_WORD_ALTERNATIVES,
@@ -42,6 +43,8 @@ from config import (
     REGISTRATION_WAKE_WORD_ALTERNATIVES,
     DELETION_WAKE_WORD,
     DELETION_WAKE_WORD_ALTERNATIVES,
+    UPDATE_WAKE_WORD,
+    UPDATE_WAKE_WORD_ALTERNATIVES,
     MCP_SERVER_SCRIPT,
     MCP_PYTHON_PATH,
     CAMERA_INDEX,
@@ -94,6 +97,7 @@ class GemmaFacialRecognition:
         self.permission: Optional[PermissionManager] = None
         self.registration: Optional[RegistrationOrchestrator] = None
         self.deletion: Optional[DeletionOrchestrator] = None
+        self.update: Optional[UpdateOrchestrator] = None
         self.access_token: Optional[str] = None
         self.token_created_time: float = 0
 
@@ -202,7 +206,23 @@ class GemmaFacialRecognition:
         )
         print("[Init] Deletion orchestrator ready (Whisper shared with registration).", flush=True)
 
-        # 8. Check server health status (NEW: Synchronous call)
+        # 8. Initialize update orchestrator
+        print("\n[Init] Setting up update orchestrator...", flush=True)
+        self.update = UpdateOrchestrator(
+            tts_speak_func=self.speech.speak,
+            whisper_model=WHISPER_MODEL,
+            whisper_device=WHISPER_DEVICE,
+            whisper_compute_type=WHISPER_COMPUTE_TYPE,
+            max_retries=3,
+            enable_llm_confirmation=ENABLE_LLM_CONFIRMATION,
+            llm_model=LLM_CONFIRMATION_MODEL,
+            llm_timeout=LLM_CONFIRMATION_TIMEOUT,
+            llm_temperature=LLM_CONFIRMATION_TEMPERATURE,
+            llm_max_tokens=LLM_CONFIRMATION_MAX_TOKENS
+        )
+        print("[Init] Update orchestrator ready (Whisper shared with other orchestrators).", flush=True)
+
+        # 9. Check server health status (NEW: Synchronous call)
         print("\n[Init] Checking server health...", flush=True)
         health = self.mcp.get_health_status(self.access_token)  # NO await!
         if health:
@@ -557,6 +577,40 @@ so you can remember them next time. Don't be robotic."""
         # Reset orchestrator state
         self.deletion.reset()
 
+    def handle_update(self) -> None:
+        """
+        Handle voice-activated user profile update flow.
+
+        Uses UpdateOrchestrator to:
+        1. Request camera permission
+        2. Recognize user via face
+        3. Confirm identity via voice
+        4. Fetch and present current profile
+        5. Select fields to update
+        6. Capture new information (name, metadata)
+        7. Preview changes
+        8. Get final confirmation
+        9. Execute update via MCP
+        """
+        print("\n[Update] Starting user update flow...", flush=True)
+
+        # Run the complete update flow
+        success, user_id = self.update.run_update_flow(
+            permission_manager=self.permission,
+            camera_manager=self.camera,
+            mcp_facade=self.mcp,
+            access_token=self.access_token,
+            confidence_threshold=SIMILARITY_THRESHOLD
+        )
+
+        if success:
+            print(f"[Update] Update completed successfully for user: {user_id}", flush=True)
+        else:
+            print("[Update] Update failed or cancelled", flush=True)
+
+        # Reset orchestrator state
+        self.update.reset()
+
     def validate_token(self) -> bool:
         """
         Validate that current token is still valid by testing it with a quick MCP call.
@@ -631,11 +685,13 @@ so you can remember them next time. Don't be robotic."""
         recognition_wake_words = [WAKE_WORD] + WAKE_WORD_ALTERNATIVES
         registration_wake_words = [REGISTRATION_WAKE_WORD] + REGISTRATION_WAKE_WORD_ALTERNATIVES
         deletion_wake_words = [DELETION_WAKE_WORD] + DELETION_WAKE_WORD_ALTERNATIVES
-        all_wake_words = recognition_wake_words + registration_wake_words + deletion_wake_words
+        update_wake_words = [UPDATE_WAKE_WORD] + UPDATE_WAKE_WORD_ALTERNATIVES
+        all_wake_words = recognition_wake_words + registration_wake_words + deletion_wake_words + update_wake_words
 
         print("\n" + "=" * 60, flush=True)
         print(f"  Recognition wake words: {recognition_wake_words}", flush=True)
         print(f"  Registration wake words: {registration_wake_words}", flush=True)
+        print(f"  Update wake words: {update_wake_words}", flush=True)
         print(f"  Deletion wake words: {deletion_wake_words}", flush=True)
         print("  Press Ctrl+C to exit", flush=True)
         print("=" * 60 + "\n", flush=True)
@@ -673,16 +729,26 @@ so you can remember them next time. Don't be robotic."""
                         for reg_word in registration_wake_words
                     )
 
+                    # Check if it's an update wake word
+                    is_update = any(
+                        upd_word.lower() in transcription_lower
+                        for upd_word in update_wake_words
+                    )
+
                     if is_deletion:
-                        # Handle deletion flow
+                        # Handle deletion flow (highest priority for safety)
                         print("[Main] Routing to user deletion...", flush=True)
                         self.handle_deletion()
+                    elif is_update:
+                        # Handle update flow (requires authentication)
+                        print("[Main] Routing to user update...", flush=True)
+                        self.handle_update()
                     elif is_registration:
                         # Handle voice registration flow
                         print("[Main] Routing to voice registration...", flush=True)
                         self.handle_voice_registration()
                     else:
-                        # Handle recognition flow
+                        # Handle recognition flow (default)
                         print("[Main] Routing to facial recognition...", flush=True)
                         self.handle_recognition()
 

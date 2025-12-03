@@ -85,7 +85,8 @@ class WhisperTranscriptionEngine:
         audio: np.ndarray,
         language: Optional[str] = None,
         beam_size: int = 5,
-        vad_filter: bool = False
+        vad_filter: bool = False,
+        grammar: Optional[list] = None
     ) -> str:
         """
         Transcribe audio to text.
@@ -95,6 +96,7 @@ class WhisperTranscriptionEngine:
             language: Language code (default: self.language)
             beam_size: Beam size for beam search (higher = more accurate, slower)
             vad_filter: Whether to use VAD filter in Whisper
+            grammar: List of acceptable phrases (used by speech_orchestrator for wake word matching)
 
         Returns:
             Transcribed text string (stripped of whitespace)
@@ -124,6 +126,20 @@ class WhisperTranscriptionEngine:
             text = " ".join([seg.text.strip() for seg in segments]).strip()
 
             print(f"[Whisper] Transcription: '{text}'", flush=True)
+
+            # Apply grammar filtering if provided (used by speech_orchestrator for wake word matching)
+            if grammar:
+                text_lower = text.lower().strip()
+                # Check if any grammar phrase is in the transcription
+                for phrase in grammar:
+                    phrase_lower = phrase.lower().strip()
+                    if phrase_lower in text_lower:
+                        print(f"[Whisper] Grammar validation: '{text}' matches '{phrase}'", flush=True)
+                        return text
+                # No grammar match found
+                print(f"[Whisper] Grammar validation failed: '{text}' does not match any of {grammar}", flush=True)
+                return ""
+
             return text
 
         except Exception as e:
