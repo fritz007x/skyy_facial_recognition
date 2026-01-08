@@ -108,13 +108,22 @@ media/
 # Dependencies
 node_modules/
 
-# Project specific
+# Project specific data directories
 skyy_face_data/
+data/skyy_face_data/
+data/chromadb_data/
+data/oauth_data/
+data/audit_logs/
 captured_image.txt
 *.whl
 # Exception: Include the InsightFace wheel needed for installation
 !insightface-0.7.3-cp311-cp311-win_amd64.whl
 python-*.exe
+
+# ML Models (downloaded separately)
+models/
+!models/.gitkeep
+!models/README.md
 
 # Vosk models and archives (too large for git)
 vosk-model-*/
@@ -123,9 +132,13 @@ vosk-model-*/
 # OAuth 2.1 sensitive data
 oauth_data/
 
-# Temporary debug/test files
-OAUTH_DEBUGGING_REPORT.md
-test_decorator_validation.py
-test_oauth_simple.py
-test_token_validation.py
+# Archive directory (local working files, not committed)
+archive/
+
+# ChromaDB data
+chroma_db/
+chromadb_data/
+
+# Audit logs
+audit_logs/
 

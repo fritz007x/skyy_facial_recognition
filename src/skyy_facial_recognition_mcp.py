@@ -601,10 +601,12 @@ def save_database(db: Dict[str, Any]) -> None:
 
 
 def generate_user_id(name: str) -> str:
-    """Generate a unique user ID based on name and timestamp."""
-    timestamp = datetime.utcnow().isoformat()
-    unique_string = f"{name}_{timestamp}"
-    hash_object = hashlib.sha256(unique_string.encode())
+    """Generate a unique user ID based on name only.
+
+    Note: Timestamp was removed to ensure same person always gets same user_id
+    and prevent duplicate enrollments when script runs multiple times.
+    """
+    hash_object = hashlib.sha256(name.encode())
     return f"user_{hash_object.hexdigest()[:12]}"
 
 
@@ -1086,8 +1088,41 @@ async def register_user(params: RegisterUserInput) -> str:
                 output += degraded_msg + "\n"
                 return output
 
-        # Normal mode: Add embedding AND all metadata to ChromaDB
+        # Normal mode: Check for existing user with same name (deduplication)
         collection = initialize_chroma()
+
+        # Query for existing user with same name
+        existing_users = collection.query(
+            query_texts=[],  # Empty query to just filter
+            where={"name": params.name},
+            include=[]
+        )
+
+        # If user already exists, return their existing ID instead of creating duplicate
+        if existing_users and existing_users.get("ids") and len(existing_users["ids"]) > 0:
+            existing_user_id = existing_users["ids"][0]
+            # Audit log: Duplicate registration attempt prevented
+            audit_logger.log_registration(
+                client_id=client_id,
+                outcome=AuditOutcome.FAILURE,
+                user_name=params.name,
+                user_id=existing_user_id,
+                error_message="User with same name already enrolled"
+            )
+
+            if params.response_format == ResponseFormat.JSON:
+                return json.dumps({
+                    "status": "duplicate",
+                    "message": f"User '{params.name}' is already enrolled in the database",
+                    "user": {
+                        "user_id": existing_user_id,
+                        "name": params.name
+                    }
+                }, indent=2)
+            else:
+                return f"# User Already Enrolled\n\nUser '{params.name}' is already in the database with ID: {existing_user_id}\n\nNo duplicate registration created."
+
+        # Add embedding AND all metadata to ChromaDB
         collection.add(
             ids=[user_id],
             embeddings=[facial_features["feature_vector"]],

@@ -140,7 +140,7 @@ This project enhances the Skyy AI platform by developing a facial recognition ca
 
 5. **Verify installation**
    ```bash
-   python src/tests/test_insightface_upgrade.py
+   python tests/unit/test_insightface_upgrade.py
    ```
 
    This will verify:
@@ -227,7 +227,7 @@ facial_mcp_py311\Scripts\activate  # Windows
 # or: source facial_mcp_py311/bin/activate  # Linux/macOS
 
 # Run the interactive tool
-python src/webcam_capture.py
+python src/utils/camera_utils.py
 ```
 
 **Available modes:**
@@ -263,7 +263,7 @@ To test all MCP server functionality, ensure the MCP server is running in Termin
 facial_mcp_py311\Scripts\activate  # Windows
 # or: source facial_mcp_py311/bin/activate  # Linux/macOS
 
-python src/tests/test_mcp_client.py
+python tests/integration/test_mcp_client.py
 ```
 
 This will:
@@ -294,7 +294,7 @@ Run the comprehensive OAuth test suite to verify the implementation:
 facial_mcp_py311\Scripts\activate  # Windows
 
 # Run OAuth tests
-python src/tests/test_oauth.py
+python tests/unit/test_oauth.py
 ```
 
 The test suite validates:
@@ -331,26 +331,51 @@ Success Rate: 100.0%
 
 ```
 skyy_facial_recognition/
-├── src/
-│   ├── skyy_facial_recognition_mcp.py  # MCP server implementation
-│   ├── webcam_capture.py               # Interactive testing tool
+├── src/                                # Source code
+│   ├── skyy_facial_recognition_mcp.py  # Main MCP server
 │   ├── oauth_config.py                 # OAuth 2.1 configuration
 │   ├── oauth_middleware.py             # Authentication decorator
-│   ├── oauth_admin.py                  # OAuth CLI management tool
-│   ├── tests/
-│   │   ├── test_mcp_client.py          # Automated MCP test suite
-│   │   └── test_oauth.py               # OAuth test suite
-│   └── test_insightface_upgrade.py     # Installation verification
+│   ├── health_checker.py               # Health monitoring system
+│   ├── audit_logger.py                 # Audit logging system
+│   ├── utils/
+│   │   └── camera_utils.py             # Webcam capture utilities
+│   └── gemma_voice_assistant/          # Voice-activated AI assistant
+│       ├── main.py                     # Entry point
+│       ├── config.py                   # Configuration
+│       └── modules/                    # Voice processing modules
+│
+├── scripts/                            # Utility scripts
+│   ├── batch_enroll.py                 # Batch user enrollment
+│   ├── delete_user.py                  # User deletion utility
+│   └── oauth_admin.py                  # OAuth CLI management tool
+│
+├── tests/                              # Test suite
+│   ├── unit/                           # Unit tests
+│   │   ├── test_oauth.py
+│   │   └── test_insightface_upgrade.py
+│   ├── integration/                    # Integration tests
+│   │   ├── test_mcp_client.py
+│   │   └── test_health_checks.py
+│   └── e2e/                            # End-to-end tests
+│       └── end_to_end_performance_test.py
+│
+├── docs/                               # Documentation
+│   ├── user-guides/                    # User documentation
+│   ├── developer/                      # Developer documentation
+│   ├── api/                            # API reference
+│   └── deployment/                     # Deployment guides
+│
+├── examples/                           # Code examples
+│   └── basic_recognition.py            # Basic usage example
+│
 ├── skyy_face_data/                     # User database (auto-created)
-│   ├── index.json                      # User metadata
-│   └── images/                         # Face image storage
-├── oauth_data/                         # OAuth keys and clients (gitignored)
-│   ├── private_key.pem                 # RSA private key
-│   ├── public_key.pem                  # RSA public key
-│   └── clients.json                    # OAuth client credentials
+├── oauth_data/                         # OAuth keys (gitignored)
+├── audit_logs/                         # Audit logs (gitignored)
 ├── facial_mcp_py311/                   # Python virtual environment
-├── requirements.txt                    # Project dependencies
-└── README.md                          # This file
+├── requirements.txt                    # Dependencies
+├── setup.py                            # Package setup
+├── pytest.ini                          # Test configuration
+└── README.md                           # This file
 ```
 
 ## Production-Grade Features
@@ -383,7 +408,7 @@ python src/skyy_facial_recognition_mcp.py
 - Returns helpful error messages for recognition attempts
 - Automatically processes queued registrations when ChromaDB recovers
 
-See [docs/HEALTH_CHECK_USAGE.md](docs/HEALTH_CHECK_USAGE.md) for details.
+See [docs/user-guides/HEALTH_CHECK_USAGE.md](docs/user-guides/HEALTH_CHECK_USAGE.md) for details.
 
 ### Audit Logging
 
@@ -433,13 +458,13 @@ Automate user enrollment from a directory of images:
 
 ```bash
 # Enroll all users from a folder
-python src/batch_enroll.py
+python scripts/batch_enroll.py
 
 # Specify custom directory
-python src/batch_enroll.py --dir path/to/enrollment/images
+python scripts/batch_enroll.py --dir path/to/enrollment/images
 
 # Skip existing users
-python src/batch_enroll.py --skip-existing
+python scripts/batch_enroll.py --skip-existing
 ```
 
 **Features:**
@@ -474,13 +499,13 @@ chromadb_data/
 - Much faster than linear search O(n)
 - Automatic index optimization
 
-# Gemma 3 Facial Recognition Prototype
+# Gemma 3 Voice Assistant
 
 Voice-activated facial recognition using Gemma 3 as the orchestrating LLM, integrated with the Skyy Facial Recognition MCP server.
 
 ## Overview
 
-This prototype demonstrates how to build a voice-activated AI assistant that:
+The voice assistant enables hands-free interaction with the facial recognition system:
 
 1. **Listens** for the wake word "Hello Gemma"
 2. **Requests permission** to capture a photo
@@ -566,7 +591,7 @@ vosk-model-small-en-us-0.15/
 
 ## Configuration (optional)
 
-Edit `config.py` to match your environment:
+Edit `src/gemma_voice_assistant/config.py` to match your environment:
 
 ```python
 # Paths - adjust if your virtual environment is elsewhere
@@ -598,9 +623,9 @@ SIMILARITY_THRESHOLD = 0.25
    facial_mcp_py311\Scripts\activate  # Windows
    ```
 
-3. **Run the prototype**:
+3. **Run the voice assistant**:
    ```bash
-   cd gemma_mcp_prototype
+   cd src/gemma_voice_assistant
    python main.py
    ```
 
@@ -641,7 +666,7 @@ SIMILARITY_THRESHOLD = 0.25
 
 ## Features
 
-The Gemma 3 Facial Recognition Prototype provides the following voice-activated capabilities:
+The Gemma 3 Voice Assistant provides the following voice-activated capabilities:
 
 ### 1. Facial Recognition ("Skyy, recognize me")
 
@@ -776,7 +801,7 @@ SYSTEM: "Your metadata will be updated with the following:
 
 ## Gemma 3 Confirmation Parsing
 
-The Gemma 3 Facial Recognition Prototype uses **Gemma 3 LLM running locally via Ollama** to provide natural language understanding for user confirmations, rather than relying on rigid keyword matching.
+The Voice Assistant uses **Gemma 3 LLM running locally via Ollama** to provide natural language understanding for user confirmations, rather than relying on rigid keyword matching.
 
 ### How It Works
 
@@ -838,7 +863,7 @@ Gemma 3 is used in three main features:
 
 ### Configuration
 
-Edit `config.py` to customize:
+Edit `src/gemma_voice_assistant/config.py` to customize:
 
 ```python
 # Ollama LLM settings

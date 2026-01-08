@@ -1,0 +1,21 @@
+# Gemma 3 Facial Recognition Prototype - Additional Dependencies
+# Main project dependencies (insightface, opencv, etc.) should be installed via parent requirements.txt
+
+# Speech Recognition & Processing
+faster-whisper>=0.10.0
+sounddevice>=0.4.6
+soundfile>=0.12.1
+webrtcvad-wheels>=0.2.0
+noisereduce>=3.0.0
+
+# Text-to-Speech
+pyttsx3>=2.90
+
+# LLM Integration
+ollama>=0.1.0
+
+# Existing project dependencies (should already be installed):
+# - insightface>=0.7.3
+# - opencv-python
+# - numpy
+# - onnxruntime
