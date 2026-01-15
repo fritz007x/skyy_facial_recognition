@@ -25,8 +25,8 @@ from typing import Optional
 # Add src directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent))
 
-# Add src directory for oauth_config (located in parent/src/)
-sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
+# Add src directory for oauth_config (located in parent directory)
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
 # Local modules - NEW REFACTORED ARCHITECTURE
 from modules.speech_orchestrator import SpeechOrchestrator as SpeechManager

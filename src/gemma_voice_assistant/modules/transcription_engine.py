@@ -11,6 +11,14 @@ from pathlib import Path
 from typing import Optional, List
 from vosk import Model, KaldiRecognizer
 
+# Import PROJECT_ROOT from config to get correct path
+import sys
+from pathlib import Path as PathLib
+config_path = PathLib(__file__).parent.parent
+sys.path.insert(0, str(config_path))
+from config import PROJECT_ROOT
+sys.path.pop(0)
+
 
 class TranscriptionEngine:
     """
@@ -40,8 +48,8 @@ class TranscriptionEngine:
 
         # Auto-detect model path if not provided
         if model_path is None:
-            project_root = Path(__file__).parent.parent.parent
-            model_path = project_root / "vosk-model-small-en-us-0.15"
+            # Use PROJECT_ROOT from config (points to project root, not src/)
+            model_path = PROJECT_ROOT / "vosk-model-small-en-us-0.15"
 
         if not Path(model_path).exists():
             raise RuntimeError(f"Vosk model not found at: {model_path}")

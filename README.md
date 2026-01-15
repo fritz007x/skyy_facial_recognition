@@ -499,9 +499,9 @@ chromadb_data/
 - Much faster than linear search O(n)
 - Automatic index optimization
 
-# Gemma 3 Voice Assistant
+# Voice Assistant
 
-Voice-activated facial recognition using Gemma 3 as the orchestrating LLM, integrated with the Skyy Facial Recognition MCP server.
+Voice-activated facial recognition integrated with the Skyy Facial Recognition MCP server. The assistant uses Python-based orchestration with Gemma 3 providing natural language understanding for confirmation parsing and personalized greeting generation.
 
 ## Overview
 
