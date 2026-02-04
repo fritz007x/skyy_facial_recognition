@@ -263,6 +263,10 @@ class RegisterUserInput(BaseModel):
         default_factory=dict,
         description="Optional additional metadata about the user (e.g., {'department': 'Engineering', 'employee_id': '12345'})"
     )
+    allow_update: bool = Field(
+        default=False,
+        description="If True, update existing user's face embedding instead of returning duplicate error (demo mode)"
+    )
     response_format: ResponseFormat = Field(
         default=ResponseFormat.MARKDOWN,
         description="Output format: 'markdown' for human-readable or 'json' for machine-readable"
@@ -1091,17 +1095,83 @@ async def register_user(params: RegisterUserInput) -> str:
         # Normal mode: Check for existing user with same name (deduplication)
         collection = initialize_chroma()
 
-        # Query for existing user with same name
-        existing_users = collection.query(
-            query_texts=[],  # Empty query to just filter
+        # Get existing users with same name using get() with where filter
+        # Note: collection.query() requires non-empty query_texts or query_embeddings
+        existing_users = collection.get(
             where={"name": params.name},
             include=[]
         )
 
-        # If user already exists, return their existing ID instead of creating duplicate
+        # If user already exists, handle based on allow_update flag
         if existing_users and existing_users.get("ids") and len(existing_users["ids"]) > 0:
             existing_user_id = existing_users["ids"][0]
-            # Audit log: Duplicate registration attempt prevented
+
+            # Demo mode: Update existing user's face embedding
+            if params.allow_update:
+                # Update the existing user's embedding and metadata
+                collection.update(
+                    ids=[existing_user_id],
+                    embeddings=[facial_features["feature_vector"]],
+                    metadatas=[chroma_metadata]
+                )
+
+                # Audit log: User updated via demo mode
+                audit_logger.log_registration(
+                    client_id=client_id,
+                    outcome=AuditOutcome.SUCCESS,
+                    user_name=params.name,
+                    user_id=existing_user_id,
+                    biometric_data={
+                        "detection_score": facial_features.get("detection_score"),
+                        "landmark_quality": facial_features.get("landmark_quality"),
+                        "face_size_ratio": facial_features.get("face_size_ratio"),
+                        "num_faces_detected": facial_features.get("num_faces_detected")
+                    },
+                    additional_info={"demo_mode": True, "action": "updated_existing"}
+                )
+
+                if params.response_format == ResponseFormat.JSON:
+                    return json.dumps({
+                        "status": "success",
+                        "message": f"User '{params.name}' face embedding updated (demo mode)",
+                        "user": {
+                            "user_id": existing_user_id,
+                            "name": params.name,
+                            "registration_timestamp": registration_timestamp,
+                            "face_quality": {
+                                "detection_score": facial_features.get("detection_score"),
+                                "landmark_quality": facial_features.get("landmark_quality"),
+                                "face_size_ratio": facial_features.get("face_size_ratio")
+                            },
+                            "metadata": params.metadata
+                        },
+                        "demo_mode": True,
+                        "action": "updated"
+                    }, indent=2)
+                else:
+                    output = f"# User Updated (Demo Mode)\n\n"
+                    output += f"**User ID:** {existing_user_id}\n"
+                    output += f"**Name:** {params.name}\n"
+                    output += f"**Updated:** {registration_timestamp}\n\n"
+
+                    output += "## Face Detection Quality\n"
+                    output += f"- **Detection Confidence:** {facial_features.get('detection_score', 0):.2%}\n"
+                    output += f"- **Overall Quality:** {facial_features.get('landmark_quality', 0):.2%}\n"
+                    output += f"- **Face Size:** {facial_features.get('face_size_ratio', 0):.2%} of image\n\n"
+
+                    if facial_features.get('num_faces_detected', 1) > 1:
+                        output += f"Note: {facial_features['num_faces_detected']} faces detected. Using the largest face.\n\n"
+
+                    if params.metadata:
+                        output += "## Metadata\n"
+                        for key, value in params.metadata.items():
+                            output += f"- **{key}:** {value}\n"
+                        output += "\n"
+
+                    output += "Face embedding has been updated with the new image.\n"
+                    return output
+
+            # Normal mode: Reject duplicate
             audit_logger.log_registration(
                 client_id=client_id,
                 outcome=AuditOutcome.FAILURE,
