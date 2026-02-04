@@ -290,7 +290,8 @@ class RegistrationOrchestrator:
         permission_manager,
         camera_manager,
         mcp_facade,
-        access_token: str
+        access_token: str,
+        allow_update: bool = False
     ) -> Tuple[bool, Optional[str]]:
         """
         Run the complete voice registration flow.
@@ -306,6 +307,7 @@ class RegistrationOrchestrator:
             camera_manager: WebcamManager instance for photo capture
             mcp_facade: SyncMCPFacade instance for registration
             access_token: OAuth access token for MCP
+            allow_update: If True, update existing user instead of returning duplicate (demo mode)
 
         Returns:
             Tuple of (success, name)
@@ -322,12 +324,10 @@ class RegistrationOrchestrator:
             return False, None
 
         # Step 2: Request camera permission
-        self.tts_speak("Great. I have saved your name. Now I need to take a photo to complete your registration.")
         print("[Registration] Requesting camera permission", flush=True)
 
-        if not permission_manager.request_camera_permission():
+        if not permission_manager.request_camera_permission(for_registration=True):
             print("[Registration] Camera permission denied", flush=True)
-            self.tts_speak("Camera permission denied. Registration cancelled.")
             self.state = RegistrationState.FAILED
             return False, None
 
@@ -340,7 +340,7 @@ class RegistrationOrchestrator:
             return False, None
 
         # Step 4: Capture photo
-        self.tts_speak("Please look at the camera.")
+        self.tts_speak("Look at the camera.")
         time.sleep(1.0)  # Give user time to position
 
         success, image_data = camera_manager.capture_to_base64()
@@ -360,12 +360,15 @@ class RegistrationOrchestrator:
                 access_token=access_token,
                 name=name,
                 image_data=image_data,
-                metadata={"registration_type": "voice"}
+                metadata={"registration_type": "voice"},
+                allow_update=allow_update
             )
 
-            if result.get("status") == "success":
+            status = result.get("status")
+
+            if status == "success":
                 user_data = result.get("user", {})
-                user_id = user_data.get("id", "unknown")
+                user_id = user_data.get("user_id", user_data.get("id", "unknown"))
 
                 print(f"[Registration] Registration successful: {user_id}", flush=True)
                 self.tts_speak(f"Registration complete. Welcome, {name}!")
@@ -373,9 +376,32 @@ class RegistrationOrchestrator:
                 camera_manager.release()
                 self.state = RegistrationState.COMPLETED
                 return True, name
+
+            elif status == "duplicate":
+                # User already exists
+                user_data = result.get("user", {})
+                existing_name = user_data.get("name", name)
+                print(f"[Registration] User '{existing_name}' already exists", flush=True)
+                self.tts_speak(f"{existing_name} is already registered in the system.")
+
+                camera_manager.release()
+                self.state = RegistrationState.COMPLETED
+                return True, name  # Consider duplicate as success for voice flow
+
+            elif status == "queued":
+                # Degraded mode - registration queued
+                print("[Registration] Registration queued (degraded mode)", flush=True)
+                self.tts_speak(f"Registration queued for {name}. It will complete shortly.")
+
+                camera_manager.release()
+                self.state = RegistrationState.COMPLETED
+                return True, name
+
             else:
-                error_msg = result.get("error", "Unknown error")
-                print(f"[Registration] Registration failed: {error_msg}", flush=True)
+                # Error case - use "message" key (server format), fallback to "error" for compatibility
+                error_msg = result.get("message", result.get("error", "Unknown error"))
+                print(f"[Registration] Registration failed (status={status}): {error_msg}", flush=True)
+                print(f"[Registration] Full response: {result}", flush=True)
                 self.tts_speak("Registration failed. Please try again.")
 
                 camera_manager.release()

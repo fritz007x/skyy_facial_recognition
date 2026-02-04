@@ -279,7 +279,8 @@ class SyncMCPFacade:
         access_token: str,
         name: str,
         image_data: str,
-        metadata: Optional[Dict[str, Any]] = None
+        metadata: Optional[Dict[str, Any]] = None,
+        allow_update: bool = False
     ) -> Dict[str, Any]:
         """
         Register a new user (synchronous).
@@ -289,13 +290,14 @@ class SyncMCPFacade:
             name: User's full name
             image_data: Base64-encoded face image
             metadata: Optional user metadata
+            allow_update: If True, update existing user instead of returning duplicate error (demo mode)
 
         Returns:
             Registration result dictionary
         """
         self._ensure_connected()
         return self._run_async(
-            self._client.register_user(access_token, name, image_data, metadata)
+            self._client.register_user(access_token, name, image_data, metadata, allow_update)
         )
 
     def get_user_profile(

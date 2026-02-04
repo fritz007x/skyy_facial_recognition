@@ -224,20 +224,22 @@ class SkyyMCPClient:
         access_token: str,
         name: str,
         image_data: str,
-        metadata: Optional[Dict[str, Any]] = None
+        metadata: Optional[Dict[str, Any]] = None,
+        allow_update: bool = False
     ) -> Dict[str, Any]:
         """
         Call skyy_register_user tool.
-        
+
         Args:
             access_token: OAuth 2.1 access token
             name: User's full name
             image_data: Base64-encoded face image
             metadata: Optional user metadata
-            
+            allow_update: If True, update existing user instead of returning duplicate error (demo mode)
+
         Returns:
             Registration result with user_id
-            
+
         Response format:
             {
                 "status": "success" | "queued" | "error",
@@ -255,11 +257,12 @@ class SkyyMCPClient:
             "access_token": access_token,
             "name": name,
             "image_data": image_data,
+            "allow_update": allow_update,
             "response_format": "json"
         }
         if metadata:
             params["metadata"] = metadata
-            
+
         return await self.call_tool("skyy_register_user", params)
     
     async def get_user_profile(
