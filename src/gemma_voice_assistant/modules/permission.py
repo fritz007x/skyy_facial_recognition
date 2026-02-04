@@ -204,19 +204,30 @@ class PermissionManager:
 
         return confirmed is True
     
-    def request_camera_permission(self) -> bool:
+    def request_camera_permission(self, for_registration: bool = False) -> bool:
         """
         Request permission to use camera for face capture.
+
+        Args:
+            for_registration: If True, uses registration-specific wording
 
         Returns:
             True if user grants permission
         """
-        return self.ask_permission(
-            "I'd like to take your photo to see if I recognize you. Is that okay?",
-            log_type="camera_capture",
-            granted_message="Great! Look at the camera.",
-            denied_message="No problem. Let me know if you change your mind."
-        )
+        if for_registration:
+            return self.ask_permission(
+                "Can I take your photo for registration?",
+                log_type="camera_capture",
+                granted_message=None,  # Caller will handle the instruction
+                denied_message="No problem. You can register anytime."
+            )
+        else:
+            return self.ask_permission(
+                "Can I take your photo to see if I recognize you?",
+                log_type="camera_capture",
+                granted_message=None,  # Caller will handle the instruction
+                denied_message="No problem. Let me know if you change your mind."
+            )
     
     def request_registration_permission(self, name: str) -> bool:
         """
