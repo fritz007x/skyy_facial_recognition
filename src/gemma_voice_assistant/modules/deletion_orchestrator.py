@@ -383,12 +383,10 @@ class DeletionOrchestrator:
         print("[Deletion] Starting user deletion flow", flush=True)
 
         # Step 1: Request camera permission
-        self.tts_speak("I need to verify your identity before deleting your profile.")
         print("[Deletion] Requesting camera permission", flush=True)
 
         if not permission_manager.request_camera_permission():
             print("[Deletion] Camera permission denied", flush=True)
-            self.tts_speak("Camera permission denied. Deletion cancelled.")
             self.state = DeletionState.CANCELLED
             return False, None
 
