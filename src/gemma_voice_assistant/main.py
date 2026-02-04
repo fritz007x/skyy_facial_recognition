@@ -45,6 +45,8 @@ from config import (
     DELETION_WAKE_WORD_ALTERNATIVES,
     UPDATE_WAKE_WORD,
     UPDATE_WAKE_WORD_ALTERNATIVES,
+    PAUSE_WAKE_WORD,
+    PAUSE_WAKE_WORD_ALTERNATIVES,
     MCP_SERVER_SCRIPT,
     MCP_PYTHON_PATH,
     CAMERA_INDEX,
@@ -676,23 +678,27 @@ so you can remember them next time. Don't be robotic."""
         """
         Main run loop - SYNCHRONOUS (matches skyy_compliment).
 
-        Listens for three types of wake words:
+        Listens for wake words:
         1. Recognition wake words: "Skyy, recognize me" -> facial recognition
         2. Registration wake words: "Skyy, remember me" -> voice registration
         3. Deletion wake words: "Skyy, forget me" -> user deletion
+        4. Update wake words: "Skyy, update me" -> profile update
+        5. Pause wake words: "Skyy, goodbye" -> graceful exit
         """
         # Combine all wake words
         recognition_wake_words = [WAKE_WORD] + WAKE_WORD_ALTERNATIVES
         registration_wake_words = [REGISTRATION_WAKE_WORD] + REGISTRATION_WAKE_WORD_ALTERNATIVES
         deletion_wake_words = [DELETION_WAKE_WORD] + DELETION_WAKE_WORD_ALTERNATIVES
         update_wake_words = [UPDATE_WAKE_WORD] + UPDATE_WAKE_WORD_ALTERNATIVES
-        all_wake_words = recognition_wake_words + registration_wake_words + deletion_wake_words + update_wake_words
+        pause_wake_words = [PAUSE_WAKE_WORD] + PAUSE_WAKE_WORD_ALTERNATIVES
+        all_wake_words = recognition_wake_words + registration_wake_words + deletion_wake_words + update_wake_words + pause_wake_words
 
         print("\n" + "=" * 60, flush=True)
         print(f"  Recognition wake words: {recognition_wake_words}", flush=True)
         print(f"  Registration wake words: {registration_wake_words}", flush=True)
         print(f"  Update wake words: {update_wake_words}", flush=True)
         print(f"  Deletion wake words: {deletion_wake_words}", flush=True)
+        print(f"  Pause/Exit wake words: {pause_wake_words}", flush=True)
         print("  Press Ctrl+C to exit", flush=True)
         print("=" * 60 + "\n", flush=True)
 
@@ -717,7 +723,13 @@ so you can remember them next time. Don't be robotic."""
                     # Determine which type of wake word was detected
                     transcription_lower = transcription.lower()
 
-                    # Check if it's a deletion wake word (highest priority for safety)
+                    # Check if it's a pause/exit wake word (highest priority)
+                    is_pause = any(
+                        pause_word.lower() in transcription_lower
+                        for pause_word in pause_wake_words
+                    )
+
+                    # Check if it's a deletion wake word (high priority for safety)
                     is_deletion = any(
                         del_word.lower() in transcription_lower
                         for del_word in deletion_wake_words
@@ -735,7 +747,12 @@ so you can remember them next time. Don't be robotic."""
                         for upd_word in update_wake_words
                     )
 
-                    if is_deletion:
+                    if is_pause:
+                        # Handle pause/exit gracefully
+                        print("[Main] Pause command received, exiting gracefully...", flush=True)
+                        self.speech.speak("Goodbye! It was nice talking with you. See you next time!")
+                        break
+                    elif is_deletion:
                         # Handle deletion flow (highest priority for safety)
                         print("[Main] Routing to user deletion...", flush=True)
                         self.handle_deletion()

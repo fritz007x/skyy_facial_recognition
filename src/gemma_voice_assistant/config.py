@@ -71,6 +71,20 @@ UPDATE_WAKE_WORD_ALTERNATIVES = [
     "sky change my information"
 ]
 
+# Pause/Stop wake word (for demo interruption)
+PAUSE_WAKE_WORD = "skyy goodbye"
+
+# Alternative pause wake words
+PAUSE_WAKE_WORD_ALTERNATIVES = [
+    "sky goodbye",
+    "skyy pause",
+    "sky pause",
+    "skyy stop",
+    "sky stop",
+    "skyy sleep",
+    "sky sleep"
+]
+
 # ============================================================================
 # Voice Registration Configuration
 # ============================================================================
