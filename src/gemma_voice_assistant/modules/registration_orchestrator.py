@@ -102,6 +102,51 @@ class RegistrationOrchestrator:
         # State
         self.state = RegistrationState.IDLE
 
+    def _extract_name_from_phrase(self, text: str) -> str:
+        """
+        Extract the actual name from common phrasing patterns.
+
+        Handles cases where users say things like:
+        - "My name is John Smith"
+        - "I'm John Smith"
+        - "I am John Smith"
+        - "It's John Smith"
+        - "Call me John Smith"
+        - "They call me John Smith"
+
+        Args:
+            text: Transcribed text that may contain name phrasing
+
+        Returns:
+            Extracted name, or original text if no pattern matched
+        """
+        import re
+
+        if not text:
+            return text
+
+        # Normalize whitespace
+        text = ' '.join(text.strip().split())
+
+        # Patterns to extract name from common phrasings (case-insensitive)
+        patterns = [
+            r"(?:my\s+name\s+is|i'm|i\s+am|it's|it\s+is)\s+(.+)",
+            r"(?:call\s+me|they\s+call\s+me|you\s+can\s+call\s+me)\s+(.+)",
+            r"(?:this\s+is|i\s+go\s+by)\s+(.+)",
+        ]
+
+        for pattern in patterns:
+            match = re.match(pattern, text, re.IGNORECASE)
+            if match:
+                extracted = match.group(1).strip()
+                # Remove trailing punctuation
+                extracted = re.sub(r'[.,!?]+$', '', extracted).strip()
+                if extracted:
+                    print(f"[Registration] Extracted name '{extracted}' from phrase '{text}'", flush=True)
+                    return extracted
+
+        return text
+
     def _looks_like_full_name(self, text: str) -> bool:
         """
         Heuristic check if text looks like a full name.
@@ -186,6 +231,9 @@ class RegistrationOrchestrator:
             name_text = self.whisper.transcribe(audio, beam_size=5)
 
             print(f"[Registration] Transcribed name: '{name_text}'", flush=True)
+
+            # Extract actual name from phrases like "my name is..."
+            name_text = self._extract_name_from_phrase(name_text)
 
             # Check if it looks like a full name
             if not self._looks_like_full_name(name_text):
