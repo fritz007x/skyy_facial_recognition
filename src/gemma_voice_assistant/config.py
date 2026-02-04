@@ -174,3 +174,12 @@ LLM_CONFIRMATION_TEMPERATURE = 0.1
 # Maximum tokens to generate for confirmation parsing
 # We only need "YES", "NO", or "UNCLEAR", so keep this very low
 LLM_CONFIRMATION_MAX_TOKENS = 10
+
+# ============================================================================
+# Demo Mode Configuration
+# ============================================================================
+
+# Enable demo mode for registration
+# When True, allows re-registering the same person (updates face embedding)
+# When False, returns "duplicate" error if user already registered
+DEMO_MODE = True

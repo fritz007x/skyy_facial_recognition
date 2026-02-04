@@ -65,7 +65,8 @@ from config import (
     LLM_CONFIRMATION_MODEL,
     LLM_CONFIRMATION_TIMEOUT,
     LLM_CONFIRMATION_TEMPERATURE,
-    LLM_CONFIRMATION_MAX_TOKENS
+    LLM_CONFIRMATION_MAX_TOKENS,
+    DEMO_MODE
 )
 
 # OAuth configuration - uses the same oauth_config as MCP server
@@ -498,7 +499,8 @@ so you can remember them next time. Don't be robotic."""
             access_token=self.access_token,
             name=name,
             image_data=image_base64,
-            metadata={"registered_via": "gemma_voice"}
+            metadata={"registered_via": "gemma_voice"},
+            allow_update=DEMO_MODE
         )
 
         status = result.get("status", "error")
@@ -538,7 +540,8 @@ so you can remember them next time. Don't be robotic."""
             permission_manager=self.permission,
             camera_manager=self.camera,
             mcp_facade=self.mcp,
-            access_token=self.access_token
+            access_token=self.access_token,
+            allow_update=DEMO_MODE
         )
 
         if success:
@@ -737,9 +740,13 @@ so you can remember them next time. Don't be robotic."""
                     )
 
                     # Check if it's a registration wake word
-                    is_registration = any(
-                        reg_word.lower() in transcription_lower
-                        for reg_word in registration_wake_words
+                    # Trigger on full phrases OR just the word "remember"
+                    is_registration = (
+                        "remember" in transcription_lower or
+                        any(
+                            reg_word.lower() in transcription_lower
+                            for reg_word in registration_wake_words
+                        )
                     )
 
                     # Check if it's an update wake word
