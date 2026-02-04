@@ -52,38 +52,65 @@ class WebcamManager:
     def initialize(self) -> bool:
         """
         Initialize the webcam.
-        
+
         Opens the camera device, sets resolution, and performs warmup
         by reading and discarding initial frames.
-        
+
         Returns:
             True if successful, False otherwise
         """
+        import time
+        import platform
+
         print(f"[Vision] Initializing camera {self.camera_index}...")
-        
-        self.cap = cv2.VideoCapture(self.camera_index)
-        
+
+        # On Windows, try DirectShow backend first (more reliable than MSMF)
+        if platform.system() == "Windows":
+            print("[Vision] Using DirectShow backend (Windows)...")
+            self.cap = cv2.VideoCapture(self.camera_index, cv2.CAP_DSHOW)
+        else:
+            self.cap = cv2.VideoCapture(self.camera_index)
+
         if not self.cap.isOpened():
             print("[Vision] ERROR: Could not open camera")
             print("[Vision] Make sure no other application is using the webcam")
             return False
-        
+
         # Set resolution
         self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, self.width)
         self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, self.height)
-        
+
+        # Give camera time to initialize hardware
+        time.sleep(0.5)
+
         # Read actual resolution (may differ from requested)
         actual_width = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
         actual_height = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
         print(f"[Vision] Camera resolution: {actual_width}x{actual_height}")
-        
+
         # Warm up camera (skip initial frames for auto-exposure to settle)
         print(f"[Vision] Warming up camera ({self.warmup_frames} frames)...")
-        for _ in range(self.warmup_frames):
+        failed_frames = 0
+        for i in range(self.warmup_frames):
             ret, _ = self.cap.read()
             if not ret:
-                print("[Vision] WARNING: Frame read failed during warmup")
-        
+                failed_frames += 1
+                # Brief pause on failure to give camera time
+                time.sleep(0.1)
+            # Small delay between frames to avoid overwhelming the camera
+            time.sleep(0.05)
+
+        if failed_frames > 0:
+            print(f"[Vision] Warmup: {failed_frames}/{self.warmup_frames} frames failed")
+
+        # Verify camera is working by capturing a test frame
+        ret, test_frame = self.cap.read()
+        if not ret or test_frame is None:
+            print("[Vision] ERROR: Camera not responding after warmup")
+            self.cap.release()
+            self.cap = None
+            return False
+
         print("[Vision] Camera ready.")
         return True
     
