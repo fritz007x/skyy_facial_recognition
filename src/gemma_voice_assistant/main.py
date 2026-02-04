@@ -409,6 +409,7 @@ so you can remember them next time. Don't be robotic."""
             return
 
         # 3. Capture image
+        self.speech.speak("Look at the camera.")
         time.sleep(1)  # Give user time to position
         success, image_base64 = self.camera.capture_to_base64()
 
@@ -481,7 +482,7 @@ so you can remember them next time. Don't be robotic."""
             return
 
         # Capture image for registration
-        self.speech.speak("Great! Look at the camera one more time.")
+        self.speech.speak("Look at the camera.")
         time.sleep(1)
         success, image_base64 = self.camera.capture_to_base64()
 
