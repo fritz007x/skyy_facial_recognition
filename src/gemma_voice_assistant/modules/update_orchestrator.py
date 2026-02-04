@@ -822,12 +822,10 @@ class UpdateOrchestrator:
         print("[Update] Starting user update flow", flush=True)
 
         # Step 1: Request camera permission
-        self.tts_speak("I need to verify your identity before updating your profile.")
         print("[Update] Requesting camera permission", flush=True)
 
         if not permission_manager.request_camera_permission():
             print("[Update] Camera permission denied", flush=True)
-            self.tts_speak("Camera permission denied. Update cancelled.")
             self.state = UpdateState.CANCELLED
             return False, None
 
