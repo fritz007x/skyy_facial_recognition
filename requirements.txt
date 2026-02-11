@@ -54,6 +54,9 @@ python-multipart==0.0.20
 # Audit Logging
 loguru==0.7.3
 
+# Web Admin Dashboard
+flask>=3.0.0
+
 # Voice Assistant - Vosk-based (offline, lightweight, grammar support)
 ollama==0.6.1
 sounddevice==0.5.3

@@ -1,0 +1,216 @@
+{% extends "base.html" %}
+
+{% block title %}Dashboard{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h1 class="h2 mb-1">Dashboard</h1>
+        <p class="text-muted mb-0">System overview and quick stats</p>
+    </div>
+    <div>
+        <span class="health-indicator {{ stats.health.overall_status if stats.health else 'unavailable' }}"></span>
+        <span class="text-muted">System {{ stats.health.overall_status|upper if stats.health else 'UNKNOWN' }}</span>
+    </div>
+</div>
+
+<!-- Stats Cards -->
+<div class="row g-4 mb-4">
+    <div class="col-md-6 col-xl-3">
+        <div class="card stat-card h-100">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-start">
+                    <div>
+                        <h6 class="text-muted mb-2">Total Users</h6>
+                        <div class="stat-value text-primary">{{ stats.total_users }}</div>
+                    </div>
+                    <div class="stat-icon text-primary">
+                        <i class="bi bi-people"></i>
+                    </div>
+                </div>
+                <a href="{{ url_for('users') }}" class="text-decoration-none small">
+                    View all users <i class="bi bi-arrow-right"></i>
+                </a>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-6 col-xl-3">
+        <div class="card stat-card h-100">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-start">
+                    <div>
+                        <h6 class="text-muted mb-2">Total Recognitions</h6>
+                        <div class="stat-value text-success">{{ stats.total_recognitions }}</div>
+                    </div>
+                    <div class="stat-icon text-success">
+                        <i class="bi bi-camera"></i>
+                    </div>
+                </div>
+                <span class="text-muted small">Lifetime face matches</span>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-6 col-xl-3">
+        <div class="card stat-card h-100">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-start">
+                    <div>
+                        <h6 class="text-muted mb-2">Most Active</h6>
+                        {% if stats.most_active_user %}
+                        <div class="stat-value text-warning" style="font-size: 1.25rem;">
+                            {{ stats.most_active_user.name|truncate(15) }}
+                        </div>
+                        <span class="text-muted small">{{ stats.most_active_user.recognition_count }} recognitions</span>
+                        {% else %}
+                        <div class="stat-value text-muted" style="font-size: 1.25rem;">--</div>
+                        <span class="text-muted small">No data yet</span>
+                        {% endif %}
+                    </div>
+                    <div class="stat-icon text-warning">
+                        <i class="bi bi-star"></i>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-6 col-xl-3">
+        <div class="card stat-card h-100">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-start">
+                    <div>
+                        <h6 class="text-muted mb-2">System Health</h6>
+                        {% if stats.health %}
+                            {% set healthy_count = stats.health.components.values()|selectattr('status', 'equalto', 'healthy')|list|length %}
+                            {% set total_count = stats.health.components|length %}
+                            <div class="stat-value {{ 'text-success' if healthy_count == total_count else 'text-warning' }}">
+                                {{ healthy_count }}/{{ total_count }}
+                            </div>
+                        {% else %}
+                            <div class="stat-value text-danger">--</div>
+                        {% endif %}
+                    </div>
+                    <div class="stat-icon {{ 'text-success' if stats.health and stats.health.overall_status == 'healthy' else 'text-warning' }}">
+                        <i class="bi bi-heart-pulse"></i>
+                    </div>
+                </div>
+                <a href="{{ url_for('health') }}" class="text-decoration-none small">
+                    View details <i class="bi bi-arrow-right"></i>
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Health Status & Quick Actions -->
+<div class="row g-4">
+    <div class="col-lg-8">
+        <div class="card h-100">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0"><i class="bi bi-heart-pulse me-2"></i>Component Health</h5>
+                <a href="{{ url_for('health') }}" class="btn btn-sm btn-outline-primary">
+                    <i class="bi bi-arrow-right"></i>
+                </a>
+            </div>
+            <div class="card-body">
+                {% if stats.health and stats.health.components %}
+                <div class="table-responsive">
+                    <table class="table table-borderless mb-0">
+                        <thead>
+                            <tr>
+                                <th>Component</th>
+                                <th>Status</th>
+                                <th>Message</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for name, component in stats.health.components.items() %}
+                            <tr>
+                                <td>
+                                    <span class="health-indicator {{ component.status }}"></span>
+                                    <strong>{{ name|upper }}</strong>
+                                </td>
+                                <td>
+                                    {% if component.status == 'healthy' %}
+                                        <span class="badge bg-success">Healthy</span>
+                                    {% elif component.status == 'degraded' %}
+                                        <span class="badge bg-warning">Degraded</span>
+                                    {% else %}
+                                        <span class="badge bg-danger">Unavailable</span>
+                                    {% endif %}
+                                </td>
+                                <td class="text-muted small">{{ component.message }}</td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <p class="text-muted mb-0">Unable to retrieve health status.</p>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-4">
+        <div class="card h-100">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-lightning me-2"></i>Quick Actions</h5>
+            </div>
+            <div class="card-body">
+                <div class="d-grid gap-3">
+                    <a href="{{ url_for('users') }}" class="btn btn-outline-primary">
+                        <i class="bi bi-people me-2"></i> Manage Users
+                    </a>
+                    <a href="{{ url_for('stats') }}" class="btn btn-outline-primary">
+                        <i class="bi bi-bar-chart me-2"></i> View Statistics
+                    </a>
+                    <a href="{{ url_for('health') }}" class="btn btn-outline-primary">
+                        <i class="bi bi-heart-pulse me-2"></i> Check Health
+                    </a>
+                </div>
+
+                {% if stats.health and stats.health.degraded_mode and stats.health.degraded_mode.active %}
+                <div class="alert alert-warning mt-4 mb-0">
+                    <i class="bi bi-exclamation-triangle me-2"></i>
+                    <strong>Degraded Mode Active</strong>
+                    <p class="small mb-0 mt-1">
+                        Some features may be unavailable.
+                        {% if stats.health.degraded_mode.queued_registrations > 0 %}
+                        <br>{{ stats.health.degraded_mode.queued_registrations }} registration(s) queued.
+                        {% endif %}
+                    </p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Capabilities -->
+{% if stats.health and stats.health.capabilities %}
+<div class="card mt-4">
+    <div class="card-header">
+        <h5 class="mb-0"><i class="bi bi-gear me-2"></i>System Capabilities</h5>
+    </div>
+    <div class="card-body">
+        <div class="row g-3">
+            {% for capability, available in stats.health.capabilities.items() %}
+            <div class="col-md-4 col-lg-3">
+                <div class="d-flex align-items-center p-2 rounded {{ 'bg-success bg-opacity-10' if available else 'bg-danger bg-opacity-10' }}">
+                    {% if available %}
+                        <i class="bi bi-check-circle-fill text-success me-2"></i>
+                    {% else %}
+                        <i class="bi bi-x-circle-fill text-danger me-2"></i>
+                    {% endif %}
+                    <span class="small">{{ capability|replace('_', ' ')|title }}</span>
+                </div>
+            </div>
+            {% endfor %}
+        </div>
+    </div>
+</div>
+{% endif %}
+{% endblock %}

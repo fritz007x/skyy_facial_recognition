@@ -1,0 +1,221 @@
+{% extends "base.html" %}
+
+{% block title %}Statistics{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <div>
+        <h1 class="h2 mb-1">Database Statistics</h1>
+        <p class="text-muted mb-0">System usage metrics and information</p>
+    </div>
+    <button class="btn btn-outline-primary" onclick="location.reload()">
+        <i class="bi bi-arrow-clockwise me-2"></i> Refresh
+    </button>
+</div>
+
+<!-- Stats Cards -->
+<div class="row g-4 mb-4">
+    <div class="col-md-6 col-xl-3">
+        <div class="card stat-card h-100">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-start">
+                    <div>
+                        <h6 class="text-muted mb-2">Total Users</h6>
+                        <div class="stat-value text-primary">{{ stats.total_users }}</div>
+                    </div>
+                    <div class="stat-icon text-primary">
+                        <i class="bi bi-people"></i>
+                    </div>
+                </div>
+                <small class="text-muted">Registered faces</small>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-6 col-xl-3">
+        <div class="card stat-card h-100">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-start">
+                    <div>
+                        <h6 class="text-muted mb-2">Total Recognitions</h6>
+                        <div class="stat-value text-success">{{ stats.total_recognitions }}</div>
+                    </div>
+                    <div class="stat-icon text-success">
+                        <i class="bi bi-camera"></i>
+                    </div>
+                </div>
+                <small class="text-muted">Lifetime face matches</small>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-6 col-xl-3">
+        <div class="card stat-card h-100">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-start">
+                    <div>
+                        <h6 class="text-muted mb-2">Avg. Recognitions</h6>
+                        <div class="stat-value text-info">
+                            {% if stats.total_users > 0 %}
+                                {{ "%.1f"|format(stats.total_recognitions / stats.total_users) }}
+                            {% else %}
+                                0
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div class="stat-icon text-info">
+                        <i class="bi bi-calculator"></i>
+                    </div>
+                </div>
+                <small class="text-muted">Per user average</small>
+            </div>
+        </div>
+    </div>
+
+    <div class="col-md-6 col-xl-3">
+        <div class="card stat-card h-100">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-start">
+                    <div>
+                        <h6 class="text-muted mb-2">Database Version</h6>
+                        <div class="stat-value text-secondary" style="font-size: 1.5rem;">{{ stats.database_version }}</div>
+                    </div>
+                    <div class="stat-icon text-secondary">
+                        <i class="bi bi-database"></i>
+                    </div>
+                </div>
+                <small class="text-muted">Schema version</small>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Most Active User & Recent Users -->
+<div class="row g-4">
+    <div class="col-lg-4">
+        <div class="card h-100">
+            <div class="card-header">
+                <h5 class="mb-0"><i class="bi bi-star me-2"></i>Most Active User</h5>
+            </div>
+            <div class="card-body">
+                {% if stats.most_active_user %}
+                <div class="text-center py-3">
+                    <div class="user-avatar mx-auto mb-3" style="width: 80px; height: 80px; font-size: 2rem;">
+                        {{ stats.most_active_user.name[0]|upper if stats.most_active_user.name else '?' }}
+                    </div>
+                    <h5 class="mb-1">{{ stats.most_active_user.name }}</h5>
+                    <p class="text-muted small mb-3">
+                        <code>{{ stats.most_active_user.user_id }}</code>
+                    </p>
+                    <div class="d-inline-block px-4 py-2 rounded bg-warning bg-opacity-10">
+                        <div class="h3 mb-0 text-warning">{{ stats.most_active_user.recognition_count }}</div>
+                        <small class="text-muted">Recognitions</small>
+                    </div>
+                </div>
+                {% else %}
+                <div class="text-center py-5">
+                    <i class="bi bi-star text-muted" style="font-size: 3rem; opacity: 0.3;"></i>
+                    <p class="text-muted mt-3 mb-0">No activity data yet</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="col-lg-8">
+        <div class="card h-100">
+            <div class="card-header d-flex justify-content-between align-items-center">
+                <h5 class="mb-0"><i class="bi bi-clock-history me-2"></i>Recent Registrations</h5>
+                <a href="{{ url_for('users') }}" class="btn btn-sm btn-outline-primary">
+                    View All <i class="bi bi-arrow-right ms-1"></i>
+                </a>
+            </div>
+            <div class="card-body p-0">
+                {% if stats.recent_users %}
+                <div class="table-responsive">
+                    <table class="table table-hover mb-0">
+                        <thead>
+                            <tr>
+                                <th class="ps-4">User</th>
+                                <th>Registered</th>
+                                <th>Recognitions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {% for user in stats.recent_users %}
+                            <tr>
+                                <td class="ps-4">
+                                    <div class="d-flex align-items-center">
+                                        <div class="user-avatar me-3" style="width: 32px; height: 32px; font-size: 0.875rem;">
+                                            {{ user.name[0]|upper if user.name else '?' }}
+                                        </div>
+                                        <div>
+                                            <a href="{{ url_for('user_profile', user_id=user.user_id) }}" class="text-decoration-none">
+                                                {{ user.name }}
+                                            </a>
+                                        </div>
+                                    </div>
+                                </td>
+                                <td>
+                                    <span class="text-muted small">{{ user.registration_timestamp|relative_time }}</span>
+                                </td>
+                                <td>
+                                    <span class="badge bg-primary bg-opacity-25 text-primary">{{ user.recognition_count or 0 }}</span>
+                                </td>
+                            </tr>
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+                {% else %}
+                <div class="text-center py-5">
+                    <i class="bi bi-people text-muted" style="font-size: 3rem; opacity: 0.3;"></i>
+                    <p class="text-muted mt-3 mb-0">No users registered yet</p>
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- Database Info -->
+<div class="card mt-4">
+    <div class="card-header">
+        <h5 class="mb-0"><i class="bi bi-info-circle me-2"></i>Database Information</h5>
+    </div>
+    <div class="card-body">
+        <div class="row g-4">
+            <div class="col-md-6">
+                <div class="p-3 rounded bg-dark bg-opacity-25">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <span class="text-muted">
+                            <i class="bi bi-tag me-2"></i> Version
+                        </span>
+                        <span>{{ stats.database_version }}</span>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-6">
+                <div class="p-3 rounded bg-dark bg-opacity-25">
+                    <div class="d-flex justify-content-between align-items-center">
+                        <span class="text-muted">
+                            <i class="bi bi-calendar me-2"></i> Created
+                        </span>
+                        <span>{{ stats.database_created|datetime if stats.database_created else 'Unknown' }}</span>
+                    </div>
+                </div>
+            </div>
+            <div class="col-12">
+                <div class="p-3 rounded bg-dark bg-opacity-25">
+                    <div class="d-flex justify-content-between align-items-start">
+                        <span class="text-muted">
+                            <i class="bi bi-folder me-2"></i> Storage Location
+                        </span>
+                        <code class="small text-break" style="max-width: 70%;">{{ stats.storage_location }}</code>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
