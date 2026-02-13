@@ -82,7 +82,8 @@ PAUSE_WAKE_WORD_ALTERNATIVES = [
     "skyy stop",
     "sky stop",
     "skyy sleep",
-    "sky sleep"
+    "sky sleep",
+    "stop",  # Simple "stop" command without wake word prefix
 ]
 
 # ============================================================================
