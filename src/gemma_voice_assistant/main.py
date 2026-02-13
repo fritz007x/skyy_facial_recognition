@@ -750,9 +750,13 @@ so you can remember them next time. Don't be robotic."""
                     )
 
                     # Check if it's an update wake word
-                    is_update = any(
-                        upd_word.lower() in transcription_lower
-                        for upd_word in update_wake_words
+                    # Trigger on full phrases OR just the word "update"
+                    is_update = (
+                        "update" in transcription_lower or
+                        any(
+                            upd_word.lower() in transcription_lower
+                            for upd_word in update_wake_words
+                        )
                     )
 
                     if is_pause:
